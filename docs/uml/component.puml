@@ -1,0 +1,40 @@
+@startuml
+package "Frontend Layer (Responsive Web/Mobile UI)" {
+  [App Shell & Disclaimer Banner] as UI
+  [Medication Dashboard] as DashUI
+  [RAG Q&A Chat UI] as ChatUI
+}
+
+package "Backend Layer (API Orchestrator)" {
+  [API Gateway & Router] as Router
+  [PII Anonymizer Filter] as PIIFilter
+  [Schedule Generator Engine] as ScheduleEngine
+  [Error & Rate Limit Handler] as ErrorHandler
+}
+
+package "Data & Intelligence Services" {
+  [Vector DB / Leaflet Store] as VectorDB
+  [MCP Interaction Server] as MCPServer
+}
+
+cloud "External Services" {
+  [LLM API (e.g. OpenAI/Anthropic)] as LLM
+}
+
+node "Configuration" {
+  [.env Environment Variables] as EnvConfig
+}
+
+UI --> Router
+DashUI --> Router
+ChatUI --> Router
+
+Router --> PIIFilter
+Router --> ScheduleEngine
+Router --> VectorDB
+Router --> MCPServer
+
+PIIFilter --> LLM : HTTPS Query (No PII - NFR-03)
+LLM --> ErrorHandler : Response / HTTP 429 Rate Limit (NFR-02)
+EnvConfig ..> Router : Load API Keys (NFR-04)
+@enduml

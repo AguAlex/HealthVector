@@ -1,0 +1,37 @@
+@startuml
+node "Patient Client Device" {
+  [Web Browser / Mobile Browser] as ClientUI
+}
+
+node "Local Developer Host Machine (Min 8GB RAM - NFR-06)" {
+  folder "Project Storage" {
+    file ".env File (API Keys - NFR-04)" as EnvFile
+  }
+  
+  node "Frontend Container / Process" {
+    [Responsive Web UI Shell] as FrontendApp
+  }
+  
+  node "Backend API Orchestrator" {
+    [API Service & RAG Engine] as BackendService
+    [MCP Interaction Tool] as MCPTool
+  }
+  
+  database "Local Vector Store" {
+    [Vector DB (Leaflet Index - DEC-6)] as LocalVDB
+  }
+}
+
+cloud "External Cloud Infrastructure" {
+  node "LLM Provider API" {
+    [External LLM Endpoint] as ExternalLLM
+  }
+}
+
+ClientUI -- FrontendApp : HTTP / REST (Responsive UI - NFR-08)
+FrontendApp -- BackendService : HTTP / Local API
+BackendService -- LocalVDB : Vector Search (<10s init - NFR-07)
+BackendService -- MCPTool : Internal Tool Call (<5s check - NFR-01)
+BackendService ..> EnvFile : Reads credentials at launch
+BackendService -- ExternalLLM : HTTPS / TLS (Anonymized Prompts)
+@enduml

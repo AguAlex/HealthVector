@@ -1,0 +1,26 @@
+@startuml
+autonumber
+actor Patient
+participant "UI (Frontend)" as UI
+participant "Backend Orchestrator" as Backend
+participant "Vector DB (Leaflets)" as VDB
+participant "MCP Interaction Server" as MCP
+
+Patient -> UI: Enter drug name (e.g. "Warfarin") & click "Add"
+UI -> Backend: POST /api/medications { name: "Warfarin" }
+Backend -> VDB: Query & verify drug leaflet existence (DEC-2)
+
+alt Leaflet NOT found (Failure Path - FR-11)
+    VDB --> Backend: Leaflet Not Found
+    Backend --> UI: 404 Error ("Not found in database")
+    UI --> Patient: Display error message & block addition
+else Leaflet Found & Approved (Approval Step)
+    VDB --> Backend: Leaflet confirmed & metadata loaded
+    Backend -> MCP: Check interaction with active drug list (FR-07)
+    MCP --> Backend: Interaction check result (e.g., alert with Aspirin)
+    
+    Backend -> Backend: Update active medication list & recalculate schedule (FR-03)
+    Backend --> UI: 200 OK { activeList, schedule, interactionAlert }
+    UI --> Patient: Render updated timeline & display interaction warning
+end
+@enduml

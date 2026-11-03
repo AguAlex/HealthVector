@@ -1,0 +1,24 @@
+@startuml
+start
+:Patient enters natural language question;
+:Filter & anonymize payload (Strip PII - NFR-03);
+:Query Vector DB for relevant leaflet chunks (FR-09);
+
+if (Relevant leaflet chunks found?) then (yes)
+  :Construct prompt with context & official leaflet text;
+  :Send request to External LLM API;
+  
+  if (LLM response status?) then (200 OK)
+    :Extract answer & exact section citation (FR-10);
+    :Render answer with source link on Chat UI;
+  else (HTTP 429 Rate Limit Error - NFR-02)
+    :Catch 429 error gracefully;
+    :Display "API limit reached. Please try again later." message;
+  endif
+
+else (no)
+  :Display "Information not found in official leaflets" warning;
+endif
+
+stop
+@enduml
