@@ -1,0 +1,28 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments & Virtualenvs
+.venv/
+venv/
+ENV/
+env/
+
+# Sensitive Environment Variables (NFR-04)
+.env
+.env.local
+
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Database & Log local files
+*.log
+*.sqlite3

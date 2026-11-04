@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Medication Assistant - API Testing Dashboard</title>
+    <!-- Tailwind CSS CDN for high-contrast, modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen pb-12">
+
+    <!-- FR-12: Persistent "Not Medical Advice" Banner -->
+    <div id="disclaimerBanner" class="bg-amber-500 text-slate-950 font-bold text-center py-2.5 px-4 shadow-md sticky top-0 z-50 flex items-center justify-center gap-2">
+        <svg class="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        <span id="disclaimerText">PROTOTYPE ONLY. NOT PROFESSIONAL MEDICAL ADVICE.</span>
+    </div>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        
+        <header class="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900 flex items-center gap-2">
+                    <span>💊</span> Patient Medication Assistant
+                </h1>
+                <p class="text-sm text-slate-500 mt-1">Tester API FastAPI + Supabase (Multi-User, MCP Tools & RAG)</p>
+            </div>
+            <div id="authBadge" class="flex items-center gap-3 bg-slate-50 px-4 py-2.5 rounded-lg border border-slate-200">
+                <span class="w-3 h-3 rounded-full bg-rose-500" id="statusDot"></span>
+                <span id="tokenStatus" class="text-sm font-semibold text-slate-700">Neautentificat</span>
+                <button id="logoutBtn" onclick="logout()" class="hidden text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1.5 rounded-md font-bold transition">Logout</button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <!-- 1. AUTHENTICATION SECTION -->
+            <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-900 border-b pb-2 mb-4 flex items-center gap-2">
+                        <span>🔑</span> 1. Autentificare (Multi-User Auth)
+                    </h2>
+
+                    <!-- Register Form -->
+                    <div class="mb-6">
+                        <h3 class="text-sm font-semibold text-slate-700 mb-2">Înregistrare Cont Nou</h3>
+                        <div class="space-y-2">
+                            <input type="email" id="regEmail" placeholder="Email (ex: pacient@test.com)" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                            <div class="grid grid-cols-2 gap-2">
+                                <input type="password" id="regPassword" placeholder="Parolă" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                                <input type="password" id="regConfirmPassword" placeholder="Repetă Parolă" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                            </div>
+                            <button onclick="register()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 rounded-lg text-sm transition">Creează Cont</button>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+
+                    <!-- Login Form -->
+                    <div>
+                        <h3 class="text-sm font-semibold text-slate-700 mb-2">Autentificare Pacient</h3>
+                        <div class="space-y-2">
+                            <input type="email" id="loginEmail" placeholder="Email" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
+                            <input type="password" id="loginPassword" placeholder="Parolă" class="w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none">
+                            <button onclick="login()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 rounded-lg text-sm transition">Autentificare (Login)</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. LEAFLETS & KNOWLEDGE BASE SECTION -->
+            <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-lg font-bold text-slate-900 border-b pb-2 mb-4 flex items-center justify-between">
+                    <span class="flex items-center gap-2"><span>📚</span> 2. Prospecte (Knowledge Base)</span>
+                    <button onclick="getLeaflets()" class="text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 font-semibold px-3 py-1.5 rounded-lg border border-indigo-200 transition">Reîmprospătează</button>
+                </h2>
+
+                <!-- Add Custom Leaflet -->
+                <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-200 mb-4 space-y-2">
+                    <h3 class="text-xs font-bold text-slate-600 uppercase tracking-wider">Adaugă Prospect Custom (Vizibil doar ție)</h3>
+                    <input type="text" id="leafName" placeholder="Nume Medicament (ex: Nurofen Forte)" class="w-full px-3 py-1.5 border rounded-lg text-sm outline-none">
+                    <textarea id="leafText" rows="3" placeholder="Textul prospectului (indicații, posologie...)" class="w-full px-3 py-1.5 border rounded-lg text-sm outline-none"></textarea>
+                    <button onclick="createLeaflet()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-1.5 rounded-lg text-xs transition">Salvează Prospect + Generează Index Vectorial</button>
+                </div>
+
+                <div>
+                    <h4 class="text-xs font-bold text-slate-500 mb-2 uppercase">Catalog Prospecte Accesibile:</h4>
+                    <ul id="leafletsList" class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                        <li class="text-xs text-slate-400 italic">Apăsați "Reîmprospătează" pentru încărcare.</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- 3. ACTIVE MEDICATIONS SECTION -->
+            <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-lg font-bold text-slate-900 border-b pb-2 mb-4 flex items-center gap-2">
+                    <span>📋</span> 3. Lista Activă de Tratament
+                </h2>
+
+                <!-- Add Drug to Active List -->
+                <div class="flex gap-2 mb-4">
+                    <input type="text" id="medName" placeholder="Nume Medicament (ex: Paracetamol)" class="flex-1 px-3 py-2 border rounded-lg text-sm outline-none">
+                    <button onclick="addMedication()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">Adaugă</button>
+                </div>
+
+                <div class="flex flex-wrap gap-2 mb-4">
+                    <button onclick="getMedications()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-md transition">Afișează Medicamente</button>
+                    <button onclick="checkInteractions()" class="text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 font-semibold px-3 py-1.5 rounded-md transition">Verifică Interacțiuni</button>
+                    <button onclick="resetData()" class="text-xs bg-rose-100 hover:bg-rose-200 text-rose-700 font-semibold px-3 py-1.5 rounded-md transition ml-auto">Resetare Date (FR-13)</button>
+                </div>
+
+                <!-- Interaction Warning Banner -->
+                <div id="interactionAlert" class="hidden mb-4 p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 font-bold flex items-center gap-2">
+                    <span>⚠️</span> <span id="interactionAlertText"></span>
+                </div>
+
+                <div>
+                    <h4 class="text-xs font-bold text-slate-500 mb-2 uppercase">Medicamente în Tratament:</h4>
+                    <ul id="medicationsList" class="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                        <li class="text-xs text-slate-400 italic">Niciun medicament încărcat.</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- 4. CHAT Q&A & MCP AGENT SECTION -->
+            <section class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                <h2 class="text-lg font-bold text-slate-900 border-b pb-2 mb-4 flex items-center gap-2">
+                    <span>🤖</span> 4. AI Assistant Chatbot (RAG & MCP Tools)
+                </h2>
+
+                <div class="space-y-3">
+                    <div class="flex gap-2">
+                        <input type="text" id="chatQuestion" placeholder="ex: Adaugă Aspirin și spune-mi ce reacții are Paracetamolul." class="flex-1 px-3 py-2 border rounded-lg text-sm outline-none">
+                        <button onclick="askChat()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">Trimite</button>
+                    </div>
+
+                    <!-- Chat Output Card -->
+                    <div id="chatOutputCard" class="hidden bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                        <div>
+                            <span class="text-xs font-bold text-slate-400 uppercase block mb-1">Răspuns AI Assistant:</span>
+                            <p id="chatAnswerText" class="text-sm text-slate-800 font-medium leading-relaxed"></p>
+                        </div>
+
+                        <!-- Citations -->
+                        <div id="citationBadge" class="hidden flex items-center gap-2 text-xs bg-purple-50 text-purple-700 px-3 py-1.5 rounded-lg border border-purple-200 font-semibold">
+                            <span>📄 Sursă Citată:</span>
+                            <span id="citationText"></span>
+                        </div>
+
+                        <!-- Executed MCP Actions -->
+                        <div id="actionsContainer" class="hidden space-y-1">
+                            <span class="text-xs font-bold text-slate-400 uppercase block">Acțiuni MCP Executate:</span>
+                            <div id="actionsList" class="space-y-1"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+
+        <!-- RAW API LOG CONSOLE -->
+        <section class="mt-6 bg-slate-900 text-slate-100 p-6 rounded-xl shadow-md border border-slate-800">
+            <div class="flex items-center justify-between mb-3">
+                <h2 class="text-sm font-bold tracking-wider uppercase text-slate-400 flex items-center gap-2">
+                    <span>💻</span> Jurnal Răspuns API (Inspector JSON)
+                </h2>
+                <button onclick="document.getElementById('log').innerText = 'Așteptare cereri...'" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded transition">Curăță Log-ul</button>
+            </div>
+            <pre id="log" class="text-xs font-mono bg-slate-950 p-4 rounded-lg border border-slate-800 overflow-x-auto max-h-64 custom-scrollbar text-emerald-400">Răspunsurile de la server vor apărea aici...</pre>
+        </section>
+
+    </main>
+
+    <script>
+        const BASE_URL = 'http://localhost:8000';
+        let authToken = localStorage.getItem('token') || '';
+
+        // Initial setup
+        updateAuthUI();
+        fetchDisclaimer();
+
+        function log(data) {
+            document.getElementById('log').innerText = JSON.stringify(data, null, 2);
+        }
+
+        function updateAuthUI() {
+            const statusDot = document.getElementById('statusDot');
+            const tokenStatus = document.getElementById('tokenStatus');
+            const logoutBtn = document.getElementById('logoutBtn');
+
+            if (authToken) {
+                statusDot.className = "w-3 h-3 rounded-full bg-emerald-500 animate-pulse";
+                tokenStatus.innerText = "Autentificat (Token JWT Activ)";
+                logoutBtn.classList.remove('hidden');
+            } else {
+                statusDot.className = "w-3 h-3 rounded-full bg-rose-500";
+                tokenStatus.innerText = "Neautentificat";
+                logoutBtn.classList.add('hidden');
+            }
+        }
+
+        async function fetchDisclaimer() {
+            try {
+                const res = await fetch(`${BASE_URL}/`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.disclaimer) {
+                        document.getElementById('disclaimerText').innerText = data.disclaimer;
+                    }
+                }
+            } catch (err) {
+                console.warn("Nu s-a putut încărca disclaimer-ul de la rădăcina API-ului.");
+            }
+        }
+
+        async function apiFetch(endpoint, method = 'GET', body = null) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (authToken) {
+                headers['Authorization'] = `Bearer ${authToken}`;
+            }
+
+            const options = { method, headers };
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+
+            try {
+                const response = await fetch(`${BASE_URL}${endpoint}`, options);
+                const data = await response.json();
+                log({ endpoint, status: response.status, ok: response.ok, data });
+                return { ok: response.ok, status: response.status, data };
+            } catch (err) {
+                log({ endpoint, error: err.message });
+                return { ok: false, error: err.message };
+            }
+        }
+
+        // --- 1. AUTH FUNCTIONS ---
+        async function register() {
+            const email = document.getElementById('regEmail').value.trim();
+            const password = document.getElementById('regPassword').value;
+            const confirm_password = document.getElementById('regConfirmPassword').value;
+
+            const res = await apiFetch('/api/auth/register', 'POST', { email, password, confirm_password });
+            if (res.ok && res.data.access_token) {
+                authToken = res.data.access_token;
+                localStorage.setItem('token', authToken);
+                updateAuthUI();
+                alert('Cont creat și autentificat cu succes!');
+            } else {
+                alert('Eroare înregistrare: ' + (res.data?.detail || 'Verificați datele introduse.'));
+            }
+        }
+
+        async function login() {
+            const email = document.getElementById('loginEmail').value.trim();
+            const password = document.getElementById('loginPassword').value;
+
+            const res = await apiFetch('/api/auth/login', 'POST', { email, password });
+            if (res.ok && res.data.access_token) {
+                authToken = res.data.access_token;
+                localStorage.setItem('token', authToken);
+                updateAuthUI();
+                getMedications();
+            } else {
+                alert('Eroare autentificare: ' + (res.data?.detail || 'Credențiale incorecte.'));
+            }
+        }
+
+        function logout() {
+            authToken = '';
+            localStorage.removeItem('token');
+            updateAuthUI();
+            document.getElementById('medicationsList').innerHTML = '<li class="text-xs text-slate-400 italic">Te-ai delogat.</li>';
+            document.getElementById('leafletsList').innerHTML = '<li class="text-xs text-slate-400 italic">Te-ai delogat.</li>';
+            log({ message: "Sesiune încheiată." });
+        }
+
+        // --- 2. LEAFLET FUNCTIONS ---
+        async function getLeaflets() {
+            const res = await apiFetch('/api/leaflets');
+            if (res.ok && Array.isArray(res.data)) {
+                const list = document.getElementById('leafletsList');
+                list.innerHTML = '';
+                
+                if (res.data.length === 0) {
+                    list.innerHTML = '<li class="text-xs text-slate-400 italic">Niciun prospect găsit.</li>';
+                    return;
+                }
+
+                res.data.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = "text-xs p-2.5 bg-slate-50 border rounded-lg flex items-center justify-between";
+                    
+                    const badgeClass = item.is_default 
+                        ? "bg-blue-100 text-blue-700 border-blue-200" 
+                        : "bg-purple-100 text-purple-700 border-purple-200";
+                    const badgeText = item.is_default ? "DEFAULT / GLOBAL" : "CUSTOM USER";
+
+                    li.innerHTML = `
+                        <span class="font-bold text-slate-800">${item.drug_name}</span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded border ${badgeClass}">${badgeText}</span>
+                    `;
+                    list.appendChild(li); // Fixed JS typo bug from previous version!
+                });
+            }
+        }
+
+        async function createLeaflet() {
+            const drug_name = document.getElementById('leafName').value.trim();
+            const leaflet_text = document.getElementById('leafText').value.trim();
+
+            if (!drug_name || !leaflet_text) {
+                alert('Completați atât numele medicamentului cât și textul prospectului.');
+                return;
+            }
+
+            const res = await apiFetch('/api/leaflets', 'POST', { drug_name, leaflet_text });
+            if (res.ok) {
+                document.getElementById('leafName').value = '';
+                document.getElementById('leafText').value = '';
+                getLeaflets();
+            } else {
+                alert('Eroare salvare prospect: ' + (res.data?.detail || 'Eroare necunoscută.'));
+            }
+        }
+
+        // --- 3. MEDICATION FUNCTIONS ---
+        async function getMedications() {
+            const res = await apiFetch('/api/medications');
+            if (res.ok && Array.isArray(res.data)) {
+                const list = document.getElementById('medicationsList');
+                list.innerHTML = '';
+
+                if (res.data.length === 0) {
+                    list.innerHTML = '<li class="text-xs text-slate-400 italic">Lista de tratament este goală.</li>';
+                    return;
+                }
+
+                res.data.forEach(item => {
+                    const li = document.createElement('li');
+                    li.className = "text-xs p-2.5 bg-slate-50 border rounded-lg flex items-center justify-between";
+                    li.innerHTML = `
+                        <div>
+                            <span class="font-bold text-slate-800">${item.drug_name}</span>
+                            <span class="text-[10px] text-slate-400 block">Adăugat la: ${new Date(item.added_at).toLocaleTimeString()}</span>
+                        </div>
+                        <button onclick="removeMedication('${item.id}')" class="text-xs bg-rose-50 text-rose-600 hover:bg-rose-100 px-2 py-1 rounded font-bold transition">Șterge</button>
+                    `;
+                    list.appendChild(li);
+                });
+            }
+        }
+
+        async function addMedication() {
+            const drug_name = document.getElementById('medName').value.trim();
+            if (!drug_name) return;
+
+            const res = await apiFetch('/api/medications', 'POST', { drug_name });
+            if (res.ok) {
+                document.getElementById('medName').value = '';
+                getMedications();
+            } else {
+                alert('Nu s-a putut adăuga: ' + (res.data?.detail || 'Medicamentul nu a fost găsit în prospecte.'));
+            }
+        }
+
+        async function removeMedication(id) {
+            const res = await apiFetch(`/api/medications/${id}`, 'DELETE');
+            if (res.ok) {
+                getMedications();
+            }
+        }
+
+        async function checkInteractions() {
+            const res = await apiFetch('/api/medications/interactions');
+            const alertBox = document.getElementById('interactionAlert');
+            const alertText = document.getElementById('interactionAlertText');
+
+            if (res.ok && res.data.has_interaction) {
+                alertBox.classList.remove('hidden');
+                alertText.innerText = res.data.warning_message;
+            } else {
+                alertBox.classList.add('hidden');
+                alert('Nu s-au detectat interacțiuni cunoscute în lista ta.');
+            }
+        }
+
+        async function resetData() {
+            if (confirm("Sigur doriți să resetați toate datele de tratament? (FR-13)")) {
+                const res = await apiFetch('/api/medications/reset', 'POST');
+                if (res.ok) {
+                    getMedications();
+                    document.getElementById('interactionAlert').classList.add('hidden');
+                }
+            }
+        }
+
+        // --- 4. CHAT FUNCTION ---
+        async function askChat() {
+            const questionInput = document.getElementById('chatQuestion');
+            const question = questionInput.value.trim();
+            if (!question) return;
+
+            const res = await apiFetch('/api/chat', 'POST', { question });
+            
+            if (res.ok && res.data) {
+                const card = document.getElementById('chatOutputCard');
+                const answerText = document.getElementById('chatAnswerText');
+                const citationBadge = document.getElementById('citationBadge');
+                const citationText = document.getElementById('citationText');
+                const actionsContainer = document.getElementById('actionsContainer');
+                const actionsList = document.getElementById('actionsList');
+
+                card.classList.remove('hidden');
+                answerText.innerText = res.data.answer;
+
+                // Citation handling
+                if (res.data.source_leaflet) {
+                    citationBadge.classList.remove('hidden');
+                    citationText.innerText = `${res.data.source_leaflet} (${res.data.source_section || 'Secțiune nedefinită'})`;
+                } else {
+                    citationBadge.classList.add('hidden');
+                }
+
+                // Actions executed handling
+                if (res.data.actions_executed && res.data.actions_executed.length > 0) {
+                    actionsContainer.classList.remove('hidden');
+                    actionsList.innerHTML = '';
+                    res.data.actions_executed.forEach(act => {
+                        const div = document.createElement('div');
+                        div.className = "text-xs p-2 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded font-medium flex items-center gap-2";
+                        div.innerHTML = `<span>⚡ ${act.action_name}:</span> <strong>Status: ${act.status}</strong>`;
+                        actionsList.appendChild(div);
+                    });
+                    // Refresh medication list if an action was executed
+                    getMedications();
+                } else {
+                    actionsContainer.classList.add('hidden');
+                }
+            }
+        }
+    </script>
+</body>
+</html>
