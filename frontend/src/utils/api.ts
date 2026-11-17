@@ -44,7 +44,10 @@ async function request<T>(
     } catch (error) {
       console.error('Could not read the backend error response.', error)
     }
-    if (response.status === 401) message = 'Your session has expired. Please sign in again.'
+    if (response.status === 401) {
+      if (token) message = 'Your session has expired. Please sign in again.'
+      else if (path === '/api/auth/login') message = 'Invalid email or password.'
+    }
     throw new Error(message)
   }
 
