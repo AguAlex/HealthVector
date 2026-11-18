@@ -11,21 +11,9 @@ export type AuthSession = {
 
 export type Medication = {
   id: string
-  backendId?: string
+  user_id: string
   drug_name: string
-  dosage: string
-  ingredients: string
-  notes: string
-  times: string[]
-}
-
-export type DoseStatuses = Record<string, 'taken' | 'missed'>
-
-export type TodayDose = {
-  key: string
-  medication: Medication
-  time: string
-  status: 'taken' | 'missed' | 'scheduled'
+  added_at: string
 }
 
 export type AppPage = 'overview' | 'schedule' | 'medications' | 'assistant'

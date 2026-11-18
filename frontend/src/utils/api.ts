@@ -8,9 +8,17 @@ type AuthInput = {
   confirm_password?: string
 }
 
-type BackendMedication = {
-  id: string
-  drug_name: string
+function localizeBackendMessage(message: string): string {
+  const missingLeaflet = message.match(
+    /^Medicamentul '(.+)' nu a fost găsit în baza de date cu prospecte \(nici în cele implicite, nici în cele adăugate de tine\)\.$/,
+  )
+  if (missingLeaflet) {
+    return `Medication '${missingLeaflet[1]}' was not found in the leaflet database (default or user-added).`
+  }
+  if (message === 'Medicamentul nu a fost găsit în lista ta.') {
+    return 'Medication was not found in your list.'
+  }
+  return message
 }
 
 async function request<T>(
@@ -40,7 +48,7 @@ async function request<T>(
     let message = `Request failed (${response.status}).`
     try {
       const body: { detail?: string } = await response.json()
-      if (body.detail) message = body.detail
+      if (body.detail) message = localizeBackendMessage(body.detail)
     } catch (error) {
       console.error('Could not read the backend error response.', error)
     }
@@ -68,12 +76,12 @@ export function register(input: AuthInput & { confirm_password: string }): Promi
   })
 }
 
-export async function getMedications(token: string): Promise<BackendMedication[]> {
-  return request<BackendMedication[]>('/api/medications', {}, token)
+export async function getMedications(token: string): Promise<Medication[]> {
+  return request<Medication[]>('/api/medications', {}, token)
 }
 
-export function addMedication(token: string, drugName: string): Promise<BackendMedication> {
-  return request<BackendMedication>(
+export function addMedication(token: string, drugName: string): Promise<Medication> {
+  return request<Medication>(
     '/api/medications',
     { method: 'POST', body: JSON.stringify({ drug_name: drugName }) },
     token,
@@ -101,30 +109,4 @@ export function askAssistant(token: string, question: string): Promise<ChatRespo
     method: 'POST',
     body: JSON.stringify({ question }),
   }, token)
-}
-
-export function mergeRemoteMedications(
-  remote: BackendMedication[],
-  local: Medication[],
-): Medication[] {
-  const remoteMedications = remote.map((item) => {
-    const saved = local.find(
-      (medication) => medication.drug_name.toLowerCase() === item.drug_name.toLowerCase(),
-    )
-    return saved ? { ...saved, backendId: item.id } : {
-      id: item.id,
-      backendId: item.id,
-      drug_name: item.drug_name,
-      dosage: '',
-      ingredients: '',
-      notes: '',
-      times: [],
-    }
-  })
-  const localOnly = local.filter((medication) => medication.id.startsWith('local-'))
-  return [...remoteMedications, ...localOnly.filter((medication) =>
-    !remoteMedications.some((remoteMedication) =>
-      remoteMedication.drug_name.toLowerCase() === medication.drug_name.toLowerCase(),
-    ),
-  )]
 }

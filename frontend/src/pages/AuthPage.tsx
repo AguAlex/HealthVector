@@ -2,13 +2,17 @@ import { useState } from 'react'
 import { AutoAwesomeRounded, VisibilityOffOutlined, VisibilityOutlined } from '@mui/icons-material'
 import { Button, IconButton, InputAdornment, TextField } from '@mui/material'
 import type { AuthSession } from '../types'
+import type { ColorTheme } from '../utils/storage'
+import ThemeToggle from '../components/ThemeToggle'
 
 type Props = {
   onAuthenticate: (session: AuthSession) => void
   authenticate: (input: { email: string; password: string; confirm_password?: string }, register: boolean) => Promise<AuthSession>
+  theme: ColorTheme
+  onToggleTheme: () => void
 }
 
-export default function AuthPage({ onAuthenticate, authenticate }: Props) {
+export default function AuthPage({ onAuthenticate, authenticate, theme, onToggleTheme }: Props) {
   const [isRegister, setIsRegister] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -42,6 +46,7 @@ export default function AuthPage({ onAuthenticate, authenticate }: Props) {
 
   return (
     <main className="auth-page">
+      <ThemeToggle theme={theme} onToggle={onToggleTheme} className="auth-theme-toggle" />
       <div className="auth-left">
         <a href="/" className="brand-mark auth-brand"><span className="brand-icon">+</span><span>HealthVector</span></a>
         <div className="auth-copy">

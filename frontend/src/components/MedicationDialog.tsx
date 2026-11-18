@@ -1,24 +1,19 @@
-import { useEffect, useState } from 'react'
-import { AddRounded, CloseRounded, DeleteOutlineRounded } from '@mui/icons-material'
+import { useEffect, useState, type FormEvent } from 'react'
+import { CloseRounded } from '@mui/icons-material'
 import { Autocomplete, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, TextField } from '@mui/material'
-import type { Medication } from '../types'
 import { searchMedicationCatalog, type MedicationCatalogOption } from '../utils/rxterms'
+
+const leafletExamples = ['Paracetamol', 'Aspirin', 'Warfarin']
 
 type Props = {
   open: boolean
-  medication?: Medication
   onClose: () => void
-  onSave: (medication: Omit<Medication, 'id'>) => Promise<void>
+  onSave: (drugName: string) => Promise<void>
 }
 
-export default function MedicationDialog({ open, medication, onClose, onSave }: Props) {
-  const [name, setName] = useState(() => medication?.drug_name ?? '')
-  const [dosage, setDosage] = useState(() => medication?.dosage ?? '')
-  const [ingredients, setIngredients] = useState(() => medication?.ingredients ?? '')
-  const [notes, setNotes] = useState(() => medication?.notes ?? '')
-  const [times, setTimes] = useState(() => medication?.times.length ? medication.times : ['08:00'])
+export default function MedicationDialog({ open, onClose, onSave }: Props) {
+  const [name, setName] = useState('')
   const [catalogOptions, setCatalogOptions] = useState<MedicationCatalogOption[]>([])
-  const [strengthOptions, setStrengthOptions] = useState<string[]>([])
   const [catalogLoading, setCatalogLoading] = useState(false)
   const [catalogError, setCatalogError] = useState('')
   const [error, setError] = useState('')
@@ -36,7 +31,7 @@ export default function MedicationDialog({ open, medication, onClose, onSave }: 
           if (controller.signal.aborted) return
           setCatalogError(lookupError instanceof Error
             ? lookupError.message
-            : 'Medication catalog is unavailable. You can still enter details manually.')
+            : 'Medication catalog is unavailable. You can still enter a name.')
           setCatalogOptions([])
         })
         .finally(() => {
@@ -51,30 +46,22 @@ export default function MedicationDialog({ open, medication, onClose, onSave }: 
   }, [name])
 
   const close = () => {
+    setName('')
+    setError('')
     onClose()
   }
 
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!name.trim() || !dosage.trim()) {
-      setError('Add the medication name and dosage to continue.')
-      return
-    }
-    if (times.some((time) => !time)) {
-      setError('Choose a time for every scheduled dose.')
+    if (!name.trim()) {
+      setError('Enter a medication name.')
       return
     }
 
     setSaving(true)
     setError('')
     try {
-      await onSave({
-        drug_name: name.trim(),
-        dosage: dosage.trim(),
-        ingredients: ingredients.trim(),
-        notes: notes.trim(),
-        times: [...times].sort(),
-      })
+      await onSave(name.trim())
       close()
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save this medication.')
@@ -89,11 +76,39 @@ export default function MedicationDialog({ open, medication, onClose, onSave }: 
         <DialogTitle className="dialog-heading">
           <div>
             <span className="eyebrow">YOUR MEDICATIONS</span>
-            <h2>{medication ? 'Edit medication' : 'Add a medication'}</h2>
+            <h2>Add a medication</h2>
           </div>
           <IconButton onClick={close} aria-label="Close dialog"><CloseRounded /></IconButton>
         </DialogTitle>
         <DialogContent className="medication-form">
+          <aside className="catalog-guide" aria-label="How medication search works">
+            <strong>How medication search works</strong>
+            <p>
+              Suggestions help identify a medication, but it can only be added if its name matches a leaflet in HealthVector.
+            </p>
+            <div className="catalog-guide-examples">
+              <span>Examples in the default leaflet catalog</span>
+              <div>
+                {leafletExamples.map((example) => (
+                  <Button
+                    key={example}
+                    type="button"
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      setName(example)
+                      setCatalogOptions([])
+                      setCatalogError('')
+                      setError('')
+                    }}
+                  >
+                    {example}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <small>These are catalog examples, not medication recommendations.</small>
+          </aside>
           <Autocomplete<MedicationCatalogOption, false, false, true>
             freeSolo
             autoSelect={false}
@@ -106,103 +121,33 @@ export default function MedicationDialog({ open, medication, onClose, onSave }: 
               setName(value)
               if (reason === 'input' || reason === 'clear') {
                 setCatalogOptions([])
-                setStrengthOptions([])
                 setCatalogError('')
                 setCatalogLoading(value.trim().length >= 2)
               }
             }}
             onChange={(_, value) => {
-              if (value && typeof value !== 'string') {
-                setName(value.name.replace(/\s+\([^)]*\)$/, '').trim())
-                setStrengthOptions(value.strengths)
-              } else if (typeof value === 'string') {
-                setName(value)
-                setStrengthOptions([])
-              }
+              setName(typeof value === 'string' ? value : value?.name.replace(/\s+\([^)]*\)$/, '').trim() ?? '')
             }}
             renderInput={(params) => (
               <TextField
                 {...params}
                 autoFocus
                 label="Medication name"
-                placeholder="Search a name or enter it manually"
-                disabled={Boolean(medication)}
+                placeholder="Search or enter a name"
                 required
               />
             )}
           />
           {catalogError && <p className="catalog-note catalog-error" role="status">{catalogError}</p>}
-          <div className="form-two-columns">
-            <Autocomplete<string, false, false, true>
-              freeSolo
-              options={strengthOptions}
-              value={dosage}
-              inputValue={dosage}
-              onInputChange={(_, value) => setDosage(value)}
-              onChange={(_, value) => {
-                if (typeof value === 'string') setDosage(value)
-              }}
-              renderInput={(params) => (
-                <TextField {...params} label="Dose" placeholder="e.g. 1 tablet" required />
-              )}
-            />
-            <TextField
-              label="Active ingredient(s)"
-              placeholder="e.g. cholecalciferol"
-              value={ingredients}
-              onChange={(event) => setIngredients(event.target.value)}
-              fullWidth
-            />
-          </div>
           <p className="catalog-note">
-            {strengthOptions.length
-              ? 'Strengths and forms are catalog options. Choose the dose prescribed to you.'
-              : 'Search suggestions use the free NIH RxTerms catalog. Confirm dose details against your prescription.'}
+            Catalog suggestions help identify names, but the backend only accepts medications with a matching leaflet.
           </p>
-          <div className="dose-time-heading">
-            <div><strong>Reminder times</strong><span>Set the times you usually take it</span></div>
-            <Button
-              size="small"
-              startIcon={<AddRounded />}
-              onClick={() => setTimes((current) => [...current, '12:00'])}
-            >
-              Add time
-            </Button>
-          </div>
-          <div className="dose-time-list">
-            {times.map((time, index) => (
-              <div className="dose-time-row" key={`time-${index}`}>
-                <TextField
-                  type="time"
-                  label={`Dose ${index + 1}`}
-                  value={time}
-                  onChange={(event) => setTimes((current) => current.map((item, i) => i === index ? event.target.value : item))}
-                  slotProps={{ inputLabel: { shrink: true } }}
-                  fullWidth
-                />
-                {times.length > 1 && (
-                  <IconButton onClick={() => setTimes((current) => current.filter((_, i) => i !== index))} aria-label="Remove dose time">
-                    <DeleteOutlineRounded />
-                  </IconButton>
-                )}
-              </div>
-            ))}
-          </div>
-          <TextField
-            label="Notes"
-            placeholder="Instructions or reminders"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            multiline
-            minRows={2}
-            fullWidth
-          />
           {error && <p className="form-error" role="alert">{error}</p>}
         </DialogContent>
         <DialogActions className="dialog-actions">
           <Button onClick={close} color="inherit">Cancel</Button>
           <Button type="submit" variant="contained" disabled={saving}>
-            {saving ? 'Saving...' : medication ? 'Save changes' : 'Add medication'}
+            {saving ? 'Saving...' : 'Add medication'}
           </Button>
         </DialogActions>
       </form>

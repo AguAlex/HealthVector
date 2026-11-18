@@ -1,6 +1,9 @@
-import type { AuthSession, DoseStatuses, Medication } from '../types'
+import type { AuthSession } from '../types'
 
 const AUTH_KEY = 'healthvector.auth'
+const THEME_KEY = 'healthvector.theme'
+
+export type ColorTheme = 'light' | 'dark'
 
 function readValue<T>(key: string, fallback: T): T {
   const raw = localStorage.getItem(key)
@@ -26,22 +29,21 @@ export function clearSession(): void {
   localStorage.removeItem(AUTH_KEY)
 }
 
-function userKey(userId: string, key: string): string {
-  return `healthvector.${userId}.${key}`
+export function readColorTheme(): ColorTheme {
+  try {
+    const savedTheme = localStorage.getItem(THEME_KEY)
+    if (savedTheme === 'light' || savedTheme === 'dark') return savedTheme
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  } catch (error) {
+    console.error('Unable to read the saved color theme.', error)
+    return 'light'
+  }
 }
 
-export function readMedications(userId: string): Medication[] {
-  return readValue<Medication[]>(userKey(userId, 'medications'), [])
-}
-
-export function saveMedications(userId: string, medications: Medication[]): void {
-  localStorage.setItem(userKey(userId, 'medications'), JSON.stringify(medications))
-}
-
-export function readDoseStatuses(userId: string): DoseStatuses {
-  return readValue<DoseStatuses>(userKey(userId, 'dose-statuses'), {})
-}
-
-export function saveDoseStatuses(userId: string, statuses: DoseStatuses): void {
-  localStorage.setItem(userKey(userId, 'dose-statuses'), JSON.stringify(statuses))
+export function saveColorTheme(theme: ColorTheme): void {
+  try {
+    localStorage.setItem(THEME_KEY, theme)
+  } catch (error) {
+    console.error('Unable to save the color theme preference.', error)
+  }
 }

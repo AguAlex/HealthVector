@@ -1,15 +1,19 @@
 import { Avatar, IconButton, Tooltip } from '@mui/material'
 import { MenuRounded, NotificationsNoneRounded } from '@mui/icons-material'
 import type { User } from '../types'
+import type { ColorTheme } from '../utils/storage'
+import ThemeToggle from './ThemeToggle'
 
 type Props = {
   user: User
   now: Date
+  theme: ColorTheme
+  onToggleTheme: () => void
   onMenuClick: () => void
   onSignOut: () => void
 }
 
-export default function MainHeader({ user, now, onMenuClick, onSignOut }: Props) {
+export default function MainHeader({ user, now, theme, onToggleTheme, onMenuClick, onSignOut }: Props) {
   return (
     <header className="main-header">
       <div className="header-brand">
@@ -27,6 +31,7 @@ export default function MainHeader({ user, now, onMenuClick, onSignOut }: Props)
           month: 'short',
           day: 'numeric',
         }).format(now)}</span>
+        <ThemeToggle theme={theme} onToggle={onToggleTheme} className="header-icon-button" />
         <Tooltip title="Notifications">
           <IconButton className="header-icon-button" aria-label="Notifications">
             <NotificationsNoneRounded />
