@@ -9,8 +9,11 @@ class MedicationResponse(BaseModel):
     user_id: str
     drug_name: str
     added_at: str
+    leaflet_id: Optional[str] = None
+    side_effects: Optional[str] = None
 
 class InteractionCheckResponse(BaseModel):
     has_interaction: bool
     warning_message: Optional[str] = None
     affected_drugs: List[str] = []
+    severity: Optional[str] = "none"
