@@ -2,7 +2,6 @@ import { useState } from 'react'
 import {
   ArrowUpwardRounded,
   AutoAwesomeRounded,
-  ChatBubbleOutlineRounded,
   PersonOutlineRounded,
 } from '@mui/icons-material'
 import { IconButton, TextField } from '@mui/material'
@@ -22,15 +21,32 @@ type Props = {
   error?: string
 }
 
+const WELCOME_ID = 'assistant-welcome'
+
 const suggestions = [
-  'What should I know about taking my medication?',
-  'Can you help me understand a leaflet?',
-  'What questions should I ask my pharmacist?',
+  'What are the side effects of Paracetamol?',
+  'Can I take Ibuprofen with Warfarin?',
+  'Help me understand a medication leaflet.',
 ]
 
+function welcomeMessage(displayName: string): Message {
+  const name = displayName.trim() || 'there'
+  return {
+    id: WELCOME_ID,
+    role: 'assistant',
+    text: (
+      `Hello, ${name}. I'm the HealthVector assistant.\n\n` +
+      'I can explain information from official medication leaflets, check known interactions, ' +
+      'help add a catalog medication, and propose a daily dose schedule — you still approve that schedule in the app.\n\n' +
+      'Ask me anything about a medication in the leaflet database, or pick a prompt below to get started.'
+    ),
+  }
+}
+
 export default function AssistantPage({ user, onAsk, error }: Props) {
+  const displayName = user.email.split('@')[0]
   const [question, setQuestion] = useState('')
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<Message[]>(() => [welcomeMessage(displayName)])
   const [asking, setAsking] = useState(false)
   const [requestError, setRequestError] = useState('')
 
@@ -75,28 +91,28 @@ export default function AssistantPage({ user, onAsk, error }: Props) {
           <span className="assistant-online"><i /> Ready to help</span>
         </div>
         <div className="chat-messages">
-          {!messages.length ? (
-            <div className="assistant-welcome">
-              <div className="assistant-welcome-icon"><ChatBubbleOutlineRounded /></div>
-              <h2>Hi there, {user.email.split('@')[0]}.</h2>
-              <p>Medication information can feel like a lot. Ask me a question, and we’ll take it one step at a time.</p>
-              <div className="suggestion-list">
-                {suggestions.map((suggestion) => (
-                  <button key={suggestion} onClick={() => void submit(suggestion)}>{suggestion}<span>↗</span></button>
-                ))}
-              </div>
-            </div>
-          ) : messages.map((message) => (
+          {messages.map((message) => (
             <div className={`chat-message ${message.role}`} key={message.id}>
               <div className="chat-message-avatar">{message.role === 'assistant' ? <AutoAwesomeRounded /> : <PersonOutlineRounded />}</div>
               <div className="chat-message-content">
                 <span className="chat-author">{message.role === 'assistant' ? 'HealthVector assistant' : 'You'}</span>
                 <p>{message.text}</p>
                 {message.source && <span className="chat-source">Source: {message.source}</span>}
-                <small>{message.disclaimer || 'Prototype only. Not professional medical advice.'}</small>
+                {message.id !== WELCOME_ID && (
+                  <small>{message.disclaimer || 'Prototype only. Not professional medical advice.'}</small>
+                )}
               </div>
             </div>
           ))}
+          {messages.length === 1 && messages[0]?.id === WELCOME_ID && (
+            <div className="suggestion-list">
+              {suggestions.map((suggestion) => (
+                <button key={suggestion} type="button" onClick={() => void submit(suggestion)}>
+                  {suggestion}<span>↗</span>
+                </button>
+              ))}
+            </div>
+          )}
           {asking && <div className="typing-indicator"><span /><span /><span /> Looking into that for you…</div>}
         </div>
         {requestError && <p className="chat-error" role="alert">{requestError}</p>}

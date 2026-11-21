@@ -107,7 +107,7 @@ VALUES
   NULL, 
   'Aspirin', 
   'Aspirina (acidul acetilsalicilic) este un analgezic, antiinflamator și antiagregant plachetar. Se utilizează cu precauție în caz de ulcere gastrice.', 
-  '{"4.1": "Indicații: Dureri, febră, prevenție cardiovasculară", "4.2": "Posologie: 300-600 mg după masă", "4.5": "Interacțiuni: Risc crescut de sângerare în combinație cu Warfarină"}'::jsonb
+  '{"4.1": "Indicații: Dureri, febră, prevenție cardiovasculară", "4.2": "Posologie: 300-600 mg după masă", "4.5": "Interacțiuni: Risc crescut de sângerare în combinație cu Warfarină", "4.8": "Reacții adverse: Iritație gastrică, ulcere gastrice, risc de sângerare"}'::jsonb
 ),
 (
   NULL, 

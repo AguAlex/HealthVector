@@ -56,7 +56,8 @@ SUPABASE_URL=https://your-project-id.supabase.co
 SUPABASE_KEY=your-supabase-anon-key
 JWT_SECRET_KEY=a-random-secret-string
 LLM_API_KEY=your_llm_provider_api_key
-LLM_PROVIDER=openai
+LLM_PROVIDER=groq
+LLM_MODEL=openai/gpt-oss-20b
 ENVIRONMENT=development
 ```
 

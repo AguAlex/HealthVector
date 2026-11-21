@@ -86,7 +86,10 @@ class LLMAdapter:
     def client() -> AsyncOpenAI:
         if not settings.llm_configured:
             raise fallback_http()
-        return AsyncOpenAI(api_key=settings.LLM_API_KEY)
+        kwargs: dict[str, Any] = {"api_key": settings.LLM_API_KEY}
+        if settings.llm_base_url:
+            kwargs["base_url"] = settings.llm_base_url
+        return AsyncOpenAI(**kwargs)
 
     @classmethod
     async def run(cls, operation: Callable[[], Awaitable[T]]) -> T:
@@ -133,7 +136,7 @@ class LLMAdapter:
 
     @classmethod
     async def embed(cls, text: str) -> list[float]:
-        if not settings.llm_configured:
+        if not settings.llm_configured or not settings.llm_supports_openai_embeddings:
             return [0.01] * 1536
         client = cls.client()
 

@@ -1944,6 +1944,11 @@
   font-weight: 700;
 }
 
+.chat-messages .suggestion-list {
+  max-width: 85%;
+  margin: 0 0 8px 39px;
+}
+
 .chat-message-content p {
   margin: 5px 0 0;
   color: #5a685f;
