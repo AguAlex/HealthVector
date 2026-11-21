@@ -1,0 +1,13 @@
+Aspirin — official leaflet excerpt (prototype)
+
+4.1 Therapeutic indications
+Pain, fever, and cardiovascular prevention.
+
+4.2 Posology
+300-600 mg after food, typically once daily unless otherwise directed.
+
+4.5 Interactions
+Increased bleeding risk in combination with Warfarin.
+
+4.8 Undesirable effects
+Gastric irritation, increased bleeding tendency.
