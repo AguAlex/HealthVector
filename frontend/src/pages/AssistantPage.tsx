@@ -93,7 +93,7 @@ export default function AssistantPage({ user, onAsk, error }: Props) {
                 <span className="chat-author">{message.role === 'assistant' ? 'HealthVector assistant' : 'You'}</span>
                 <p>{message.text}</p>
                 {message.source && <span className="chat-source">Source: {message.source}</span>}
-                {message.disclaimer && <small>{message.disclaimer}</small>}
+                <small>{message.disclaimer || 'Prototype only. Not professional medical advice.'}</small>
               </div>
             </div>
           ))}
@@ -117,7 +117,7 @@ export default function AssistantPage({ user, onAsk, error }: Props) {
             <ArrowUpwardRounded />
           </IconButton>
         </form>
-        <p className="assistant-disclaimer">For general information only. Always confirm medication decisions with your doctor or pharmacist.</p>
+        <p className="assistant-disclaimer">Prototype only. Not professional medical advice.</p>
       </section>
     </div>
   )

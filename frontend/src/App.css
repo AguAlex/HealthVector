@@ -2,6 +2,91 @@
   min-height: 100vh;
 }
 
+.disclaimer-banner {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  padding: 9px 16px;
+  background: #fff4c4;
+  color: #1c1917;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border-bottom: 1px solid #d6b25a;
+}
+
+.auth-page > .disclaimer-banner {
+  grid-column: 1 / -1;
+}
+
+.page-title-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.header-icon-button.MuiIconButton-root {
+  position: relative;
+}
+
+.due-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 99px;
+  background: #9a3412;
+  color: #fff7ed;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.side-effects-toggle {
+  margin: 8px 0 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: #1f4d3d;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.side-effects-text {
+  margin: 8px 0 0;
+  color: #33403a;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.schedule-summary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.schedule-dose.is-due .schedule-dose-card {
+  border-color: #d6b25a;
+  background: #fff9e8;
+}
+
+@media (max-width: 375px) {
+  .page-title-actions,
+  .schedule-summary-actions {
+    width: 100%;
+  }
+
+  .page-title-actions .MuiButton-root,
+  .schedule-summary-actions .MuiButton-root {
+    flex: 1 1 auto;
+  }
+}
+
 .main-header {
   height: 74px;
   padding: 0 42px 0 35px;
@@ -751,8 +836,8 @@
 .medical-disclaimer,
 .schedule-footnote {
   margin-top: 17px;
-  color: #9aa39d;
-  font-size: 10px;
+  color: #3f4c45;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -1576,8 +1661,8 @@
 .chat-source {
   display: block;
   margin-top: 8px;
-  color: #96a198;
-  font-size: 9px;
+  color: #3f4c45;
+  font-size: 12px;
   line-height: 1.5;
 }
 
@@ -2152,6 +2237,22 @@
   .medication-form.MuiDialogContent-root {
     padding: 10px 18px 16px !important;
   }
+}
+
+html[data-theme='dark'] .disclaimer-banner {
+  background: #5c4308;
+  color: #fff8d6;
+  border-bottom-color: #c9a227;
+}
+
+html[data-theme='dark'] .side-effects-toggle {
+  color: #b7e0c6;
+}
+
+html[data-theme='dark'] .side-effects-text,
+html[data-theme='dark'] .chat-message-content small,
+html[data-theme='dark'] .chat-source {
+  color: #d5e2d8;
 }
 
 html[data-theme='dark'] {

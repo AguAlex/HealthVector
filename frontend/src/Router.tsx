@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import type { AppPage, AuthSession, ChatResponse, Medication } from './types'
+import type { AppPage, AuthSession, ChatResponse, Medication, SchedulePayload } from './types'
 import type { ColorTheme } from './utils/storage'
 
 const AssistantPage = lazy(() => import('./pages/AssistantPage'))
@@ -26,6 +26,9 @@ type RouterProps =
   | {
       session: AuthSession
       medications: Medication[]
+      schedule: SchedulePayload | null
+      scheduleLoading: boolean
+      scheduleWorking: boolean
       now: Date
       onNavigate: (page: AppPage) => void
       onAddMedication: () => void
@@ -33,9 +36,16 @@ type RouterProps =
       onSaveMedication: (drugName: string) => Promise<void>
       onRemoveMedication: (medication: Medication) => Promise<void>
       onCheckInteractions: () => void
+      onReset: () => Promise<void>
       interactionWarning: string
       checkingInteractions: boolean
       onAskAssistant: (question: string) => Promise<ChatResponse>
+      onGenerateSchedule: () => Promise<void>
+      onApproveSchedule: () => Promise<void>
+      onRejectSchedule: () => Promise<void>
+      onTakeDose: (doseId: string) => Promise<void>
+      onMissDose: (doseId: string) => Promise<void>
+      onExportSchedule: () => Promise<void>
     }
 
 export default function Router(props: RouterProps) {
@@ -62,6 +72,9 @@ export default function Router(props: RouterProps) {
   const {
     session,
     medications,
+    schedule,
+    scheduleLoading,
+    scheduleWorking,
     now,
     onNavigate,
     onAddMedication,
@@ -69,9 +82,16 @@ export default function Router(props: RouterProps) {
     onSaveMedication,
     onRemoveMedication,
     onCheckInteractions,
+    onReset,
     interactionWarning,
     checkingInteractions,
     onAskAssistant,
+    onGenerateSchedule,
+    onApproveSchedule,
+    onRejectSchedule,
+    onTakeDose,
+    onMissDose,
+    onExportSchedule,
   } = props
 
   return (
@@ -82,6 +102,7 @@ export default function Router(props: RouterProps) {
           element={
             <OverviewPage
               medications={medications}
+              schedule={schedule}
               onNavigate={onNavigate}
               onAddMedication={onAddMedication}
               greeting={greeting}
@@ -93,6 +114,16 @@ export default function Router(props: RouterProps) {
           path="/schedule"
           element={
             <SchedulePage
+              schedule={schedule}
+              loading={scheduleLoading}
+              working={scheduleWorking}
+              onGenerate={onGenerateSchedule}
+              onApprove={onApproveSchedule}
+              onReject={onRejectSchedule}
+              onTake={onTakeDose}
+              onMiss={onMissDose}
+              onExport={onExportSchedule}
+              onReset={onReset}
               onAddMedication={onAddMedication}
             />
           }
@@ -105,6 +136,7 @@ export default function Router(props: RouterProps) {
               onSave={onSaveMedication}
               onRemove={onRemoveMedication}
               onCheckInteractions={onCheckInteractions}
+              onReset={onReset}
               interactionWarning={interactionWarning}
               checkingInteractions={checkingInteractions}
             />

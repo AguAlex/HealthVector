@@ -14,6 +14,7 @@ type Props = {
   onSave: (drugName: string) => Promise<void>
   onRemove: (medication: Medication) => Promise<void>
   onCheckInteractions: () => void
+  onReset: () => Promise<void>
   interactionWarning: string
   checkingInteractions: boolean
 }
@@ -23,6 +24,7 @@ export default function MedicationsPage({
   onSave,
   onRemove,
   onCheckInteractions,
+  onReset,
   interactionWarning,
   checkingInteractions,
 }: Props) {
@@ -30,6 +32,7 @@ export default function MedicationsPage({
   const [removalTarget, setRemovalTarget] = useState<Medication>()
   const [removalError, setRemovalError] = useState('')
   const [removing, setRemoving] = useState(false)
+  const [expandedId, setExpandedId] = useState<string>()
 
   const openNew = () => {
     setDialogOpen(true)
@@ -61,7 +64,10 @@ export default function MedicationsPage({
           <h1>Medications</h1>
           <p>View and remove medications saved in your account.</p>
         </div>
-        <Button variant="contained" startIcon={<AddRounded />} onClick={openNew}>Add medication</Button>
+        <div className="page-title-actions">
+          <Button color="inherit" onClick={() => void onReset()}>Reset</Button>
+          <Button variant="contained" startIcon={<AddRounded />} onClick={openNew}>Add medication</Button>
+        </div>
       </section>
 
       {interactionWarning && <div className="inline-notice warning-notice"><strong>Interaction notice</strong><span>{interactionWarning}</span></div>}
@@ -91,6 +97,17 @@ export default function MedicationsPage({
               <div className="medication-card-content">
                 <span className="eyebrow">MEDICATION</span>
                 <h2>{medication.drug_name}</h2>
+                <button
+                  className="side-effects-toggle"
+                  onClick={() => setExpandedId((current) => current === medication.id ? undefined : medication.id)}
+                >
+                  {expandedId === medication.id ? 'Hide side effects' : 'Show side effects'}
+                </button>
+                {expandedId === medication.id && (
+                  <p className="side-effects-text">
+                    {medication.side_effects || 'No §4.8 side-effect section is stored for this leaflet.'}
+                  </p>
+                )}
                 <div className="medication-card-footer">
                   <div className="medication-card-actions">
                     <IconButton
@@ -125,7 +142,7 @@ export default function MedicationsPage({
         </section>
       )}
       <div className="medical-disclaimer">
-        <span>ⓘ</span> The current backend stores medication names only. Follow your prescription or package directions.
+        <span>ⓘ</span> Follow your prescription or package directions.
       </div>
       <MedicationDialog
         key={String(dialogOpen)}

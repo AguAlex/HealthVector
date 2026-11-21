@@ -4,6 +4,7 @@ import { Button, IconButton, InputAdornment, TextField } from '@mui/material'
 import type { AuthSession } from '../types'
 import type { ColorTheme } from '../utils/storage'
 import ThemeToggle from '../components/ThemeToggle'
+import DisclaimerBanner from '../components/DisclaimerBanner'
 
 type Props = {
   onAuthenticate: (session: AuthSession) => void
@@ -46,6 +47,7 @@ export default function AuthPage({ onAuthenticate, authenticate, theme, onToggle
 
   return (
     <main className="auth-page">
+      <DisclaimerBanner />
       <ThemeToggle theme={theme} onToggle={onToggleTheme} className="auth-theme-toggle" />
       <div className="auth-left">
         <a href="/" className="brand-mark auth-brand"><span className="brand-icon">+</span><span>HealthVector</span></a>
