@@ -45,6 +45,7 @@ type RouterProps =
       onRejectSchedule: () => Promise<void>
       onTakeDose: (doseId: string) => Promise<void>
       onMissDose: (doseId: string) => Promise<void>
+      onUpdateDoseTime: (doseId: string, scheduledTime: string) => Promise<void>
       onExportSchedule: () => Promise<void>
     }
 
@@ -91,6 +92,7 @@ export default function Router(props: RouterProps) {
     onRejectSchedule,
     onTakeDose,
     onMissDose,
+    onUpdateDoseTime,
     onExportSchedule,
   } = props
 
@@ -122,6 +124,7 @@ export default function Router(props: RouterProps) {
               onReject={onRejectSchedule}
               onTake={onTakeDose}
               onMiss={onMissDose}
+              onUpdateTime={onUpdateDoseTime}
               onExport={onExportSchedule}
               onReset={onReset}
               onAddMedication={onAddMedication}

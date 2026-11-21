@@ -3,7 +3,13 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.dependencies import get_current_user
-from app.schemas.schedule import DoseResponse, ScheduleExportResponse, ScheduleRecord, ScheduleResponse
+from app.schemas.schedule import (
+    DoseResponse,
+    DoseTimeUpdate,
+    ScheduleExportResponse,
+    ScheduleRecord,
+    ScheduleResponse,
+)
 from app.services.schedule_service import ScheduleService
 
 router = APIRouter(prefix="/api/schedules", tags=["Schedules"])
@@ -98,6 +104,16 @@ async def mark_missed(dose_id: str, current_user: dict = Depends(get_current_use
         date=str(dose.get("date") or ""),
         due=False,
     )
+
+
+@router.patch("/doses/{dose_id}", response_model=ScheduleResponse)
+async def update_dose_time(
+    dose_id: str,
+    body: DoseTimeUpdate,
+    current_user: dict = Depends(get_current_user),
+):
+    payload = ScheduleService.update_dose_time(current_user["id"], dose_id, body.scheduled_time)
+    return _serialize(payload)
 
 
 @router.get("/export", response_model=ScheduleExportResponse)

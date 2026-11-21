@@ -163,6 +163,14 @@ export function markDoseMissed(token: string, doseId: string) {
   return request(`/api/schedules/doses/${encodeURIComponent(doseId)}/missed`, { method: 'POST' }, token)
 }
 
+export function updateDoseTime(token: string, doseId: string, scheduledTime: string): Promise<SchedulePayload> {
+  return request<SchedulePayload>(
+    `/api/schedules/doses/${encodeURIComponent(doseId)}`,
+    { method: 'PATCH', body: JSON.stringify({ scheduled_time: scheduledTime }) },
+    token,
+  )
+}
+
 export async function exportScheduleText(token: string): Promise<string> {
   const result = await request<{ text: string }>('/api/schedules/export', {}, token)
   return result.text

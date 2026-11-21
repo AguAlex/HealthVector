@@ -3,7 +3,24 @@ import { CloseRounded } from '@mui/icons-material'
 import { Autocomplete, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, TextField } from '@mui/material'
 import { searchMedicationCatalog, type MedicationCatalogOption } from '../utils/rxterms'
 
-const leafletExamples = ['Paracetamol', 'Aspirin', 'Warfarin', 'Ibuprofen']
+const leafletExamples = [
+  'Paracetamol',
+  'Aspirin',
+  'Warfarin',
+  'Ibuprofen',
+  'Simvastatin',
+  'Clarithromycin',
+  'Fluoxetine',
+  'Sertraline',
+  'Digoxin',
+  'Lisinopril',
+  'Spironolactone',
+  'Potassium chloride',
+  'Methotrexate',
+  'Ciprofloxacin',
+  'Amiodarone',
+  'Lithium',
+]
 
 type Props = {
   open: boolean

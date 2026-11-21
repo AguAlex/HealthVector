@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime, time, timezone
 from typing import Any
 
@@ -12,7 +13,21 @@ _DEFAULT_TIMES = {
     "aspirin": ["08:00"],
     "warfarin": ["18:00"],
     "ibuprofen": ["08:00", "14:00", "20:00"],
+    "simvastatin": ["18:00"],
+    "clarithromycin": ["08:00", "20:00"],
+    "fluoxetine": ["08:00"],
+    "sertraline": ["08:00"],
+    "digoxin": ["08:00"],
+    "lisinopril": ["08:00"],
+    "spironolactone": ["08:00"],
+    "potassium chloride": ["08:00", "20:00"],
+    "methotrexate": ["08:00"],
+    "ciprofloxacin": ["08:00", "20:00"],
+    "amiodarone": ["08:00"],
+    "lithium": ["08:00", "20:00"],
 }
+
+_TIME_PATTERN = re.compile(r"^(\d{1,2}):(\d{2})(?::\d{2})?$")
 
 
 class ScheduleService:
@@ -28,6 +43,22 @@ class ScheduleService:
         if "o dată" in text or "once" in text:
             return ["08:00"]
         return _DEFAULT_TIMES.get(drug_name.strip().lower(), ["08:00"])
+
+    @staticmethod
+    def _normalize_time(value: str) -> str:
+        match = _TIME_PATTERN.match((value or "").strip())
+        if not match:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Scheduled time must be in HH:MM format.",
+            )
+        hour, minute = int(match.group(1)), int(match.group(2))
+        if hour > 23 or minute > 59:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Scheduled time must be a valid clock time.",
+            )
+        return f"{hour:02d}:{minute:02d}"
 
     @staticmethod
     def _today() -> str:
@@ -245,6 +276,63 @@ class ScheduleService:
         )
         audit("dose_status", new_status)
         return updated.data[0]
+
+    @classmethod
+    def update_dose_time(cls, user_id: str, dose_id: str, scheduled_time: str) -> dict[str, Any]:
+        normalized = cls._normalize_time(scheduled_time)
+        supabase = get_supabase_client()
+        dose_res = (
+            supabase.table("daily_schedule")
+            .select("*")
+            .eq("id", dose_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if not dose_res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dose not found.")
+        dose = dose_res.data[0]
+        if dose.get("status") != "scheduled":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Only a scheduled dose can be moved. Taken or missed doses cannot be edited.",
+            )
+        schedule_id = dose.get("schedule_id")
+        if not schedule_id:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Dose is not attached to a schedule.")
+        schedule_res = (
+            supabase.table("schedules")
+            .select("*")
+            .eq("id", schedule_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if not schedule_res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found.")
+        schedule = schedule_res.data[0]
+        if schedule["status"] not in ("PENDING_APPROVAL", "APPROVED", "BLOCKED"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This schedule can no longer be edited.",
+            )
+
+        supabase.table("daily_schedule").update({"scheduled_time": normalized}).eq("id", dose_id).eq(
+            "user_id", user_id
+        ).execute()
+
+        if schedule["status"] == "APPROVED":
+            supabase.table("schedules").update(
+                {"status": "PENDING_APPROVAL", "approved_at": None, "proposed_by": "user"}
+            ).eq("id", schedule_id).eq("user_id", user_id).execute()
+            audit("schedule_modified", "PENDING_APPROVAL")
+        else:
+            audit("dose_time_updated", schedule["status"])
+
+        payload = cls.get_today(user_id)
+        if not payload:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found.")
+        names = list({item["drug_name"] for item in payload["doses"]})
+        payload["interaction"] = InteractionService.check(names)
+        return payload
 
     @classmethod
     def export_text(cls, user_id: str) -> str:

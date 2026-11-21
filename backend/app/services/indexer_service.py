@@ -8,7 +8,7 @@ class LeafletIndexerService:
         supabase = get_supabase_client()
         
         # Interoghează prospectele fără embedding
-        res = supabase.table("leaflets").select("id, drug_name, leaflet_text").filter("embedding", "is", "null").execute()
+        res = supabase.table("leaflets").select("id, drug_name, leaflet_text").is_("embedding", "null").execute()
         
         if not res.data:
             print("Toate prospectele sunt deja indexate vectorial.")

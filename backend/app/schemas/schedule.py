@@ -1,6 +1,6 @@
 from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DoseResponse(BaseModel):
@@ -33,3 +33,7 @@ class ScheduleResponse(BaseModel):
 
 class ScheduleExportResponse(BaseModel):
     text: str
+
+
+class DoseTimeUpdate(BaseModel):
+    scheduled_time: str = Field(..., example="14:30")

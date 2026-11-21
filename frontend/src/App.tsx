@@ -21,6 +21,7 @@ import {
   removeMedication as removeBackendMedication,
   resetDashboard,
   signIn,
+  updateDoseTime,
 } from './utils/api'
 import { clearSession, readColorTheme, readSession, saveColorTheme, saveSession, type ColorTheme } from './utils/storage'
 import './App.css'
@@ -232,6 +233,11 @@ function AppFrame() {
     await loadSchedule(session.access_token)
   })
 
+  const onUpdateDoseTime = (doseId: string, scheduledTime: string) => withScheduleWork(async () => {
+    if (!session) return
+    setSchedule(await updateDoseTime(session.access_token, doseId, scheduledTime))
+  })
+
   const onExportSchedule = async () => {
     if (!session) return
     try {
@@ -300,6 +306,7 @@ function AppFrame() {
             onRejectSchedule={onRejectSchedule}
             onTakeDose={onTakeDose}
             onMissDose={onMissDose}
+            onUpdateDoseTime={onUpdateDoseTime}
             onExportSchedule={onExportSchedule}
           />
         </main>
