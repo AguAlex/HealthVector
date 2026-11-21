@@ -6,12 +6,13 @@ import {
   ScienceOutlined,
 } from '@mui/icons-material'
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, IconButton } from '@mui/material'
-import type { Medication } from '../types'
+import type { CustomLeafletInput, Medication } from '../types'
 import MedicationDialog from '../components/MedicationDialog'
 
 type Props = {
   medications: Medication[]
   onSave: (drugName: string) => Promise<void>
+  onSaveCustom: (input: CustomLeafletInput) => Promise<void>
   onRemove: (medication: Medication) => Promise<void>
   onCheckInteractions: () => void
   onReset: () => Promise<void>
@@ -22,6 +23,7 @@ type Props = {
 export default function MedicationsPage({
   medications,
   onSave,
+  onSaveCustom,
   onRemove,
   onCheckInteractions,
   onReset,
@@ -29,12 +31,14 @@ export default function MedicationsPage({
   checkingInteractions,
 }: Props) {
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [dialogMode, setDialogMode] = useState<'catalog' | 'custom'>('catalog')
   const [removalTarget, setRemovalTarget] = useState<Medication>()
   const [removalError, setRemovalError] = useState('')
   const [removing, setRemoving] = useState(false)
   const [expandedId, setExpandedId] = useState<string>()
 
-  const openNew = () => {
+  const openNew = (mode: 'catalog' | 'custom' = 'catalog') => {
+    setDialogMode(mode)
     setDialogOpen(true)
   }
 
@@ -62,11 +66,12 @@ export default function MedicationsPage({
         <div>
           <div className="eyebrow">YOUR PERSONAL MEDICATION LIST</div>
           <h1>Medications</h1>
-          <p>View and remove medications saved in your account.</p>
+          <p>Add a catalog name, or paste your own leaflet if the medication is not in the database.</p>
         </div>
         <div className="page-title-actions">
           <Button color="inherit" onClick={() => void onReset()}>Reset</Button>
-          <Button variant="contained" startIcon={<AddRounded />} onClick={openNew}>Add medication</Button>
+          <Button color="inherit" variant="outlined" onClick={() => openNew('custom')}>Add with leaflet</Button>
+          <Button variant="contained" startIcon={<AddRounded />} onClick={() => openNew('catalog')}>Add medication</Button>
         </div>
       </section>
 
@@ -125,10 +130,10 @@ export default function MedicationsPage({
               </div>
             </article>
           ))}
-          <button className="add-medication-card" onClick={openNew}>
+          <button className="add-medication-card" onClick={() => openNew('catalog')}>
             <span className="add-medication-circle"><AddRounded /></span>
             <strong>Add another medication</strong>
-            <span>Add a name recognized by the backend</span>
+            <span>From the catalog, or with your own leaflet</span>
           </button>
         </section>
       ) : (
@@ -136,8 +141,11 @@ export default function MedicationsPage({
           <div className="empty-state">
             <div className="empty-icon"><MedicationOutlined /></div>
             <strong>Your medication list is a blank slate</strong>
-            <p>Add medication names that have a matching leaflet in the backend.</p>
-            <Button variant="contained" startIcon={<AddRounded />} onClick={openNew}>Add your first medication</Button>
+            <p>Add a catalog medication, or paste your own official leaflet to register a new name.</p>
+            <div className="empty-actions">
+              <Button variant="contained" startIcon={<AddRounded />} onClick={() => openNew('catalog')}>Add your first medication</Button>
+              <Button color="inherit" onClick={() => openNew('custom')}>Add with leaflet</Button>
+            </div>
           </div>
         </section>
       )}
@@ -145,10 +153,12 @@ export default function MedicationsPage({
         <span>ⓘ</span> Follow your prescription or package directions.
       </div>
       <MedicationDialog
-        key={String(dialogOpen)}
+        key={`${dialogOpen}-${dialogMode}`}
         open={dialogOpen}
+        initialMode={dialogMode}
         onClose={() => setDialogOpen(false)}
         onSave={save}
+        onSaveCustom={onSaveCustom}
       />
       <Dialog
         open={Boolean(removalTarget)}

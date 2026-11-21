@@ -18,6 +18,14 @@ export type Medication = {
   side_effects?: string | null
 }
 
+export type CustomLeafletInput = {
+  drug_name: string
+  leaflet_text: string
+  posology?: string
+  side_effects?: string
+  interactions?: string
+}
+
 export type AppPage = 'overview' | 'schedule' | 'medications' | 'assistant'
 
 export type ChatResponse = {
@@ -60,4 +68,14 @@ export type SchedulePayload = {
     affected_drugs?: string[]
   } | null
   due_count: number
+}
+
+export type ScheduleDaySummary = {
+  date: string
+  schedule_id: string
+  status: string
+  total_doses: number
+  taken_count: number
+  missed_count: number
+  all_taken: boolean
 }

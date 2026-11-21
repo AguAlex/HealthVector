@@ -3,16 +3,18 @@ import { BrowserRouter, useLocation, useNavigate } from 'react-router-dom'
 import MainHeader from './components/MainHeader'
 import MainSlider from './components/MainSlider'
 import DisclaimerBanner from './components/DisclaimerBanner'
-import type { AppPage, AuthSession, Medication, SchedulePayload } from './types'
+import type { AppPage, AuthSession, CustomLeafletInput, Medication, ScheduleDaySummary, SchedulePayload } from './types'
 import Router from './Router'
 import {
   addMedication as addBackendMedication,
+  createCustomLeaflet,
   approveSchedule,
   askAssistant,
   checkInteractions,
   exportScheduleText,
   generateSchedule,
   getMedications,
+  getScheduleHistory,
   getTodaySchedule,
   markDoseMissed,
   markDoseTaken,
@@ -41,6 +43,12 @@ function AppFrame() {
   const [schedule, setSchedule] = useState<SchedulePayload | null>(null)
   const [scheduleLoading, setScheduleLoading] = useState(false)
   const [scheduleWorking, setScheduleWorking] = useState(false)
+  const [history, setHistory] = useState<ScheduleDaySummary[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyMonth, setHistoryMonth] = useState(() => {
+    const today = new Date()
+    return { year: today.getFullYear(), month: today.getMonth() }
+  })
   const [now, setNow] = useState(() => new Date())
   const [notice, setNotice] = useState('')
   const [interactionWarning, setInteractionWarning] = useState('')
@@ -58,6 +66,29 @@ function AppFrame() {
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000)
     return () => window.clearInterval(timer)
+  }, [])
+
+  const monthRange = (year: number, month: number) => {
+    const start = new Date(year, month, 1)
+    const end = new Date(year, month + 1, 0)
+    const iso = (value: Date) => {
+      const mm = String(value.getMonth() + 1).padStart(2, '0')
+      const dd = String(value.getDate()).padStart(2, '0')
+      return `${value.getFullYear()}-${mm}-${dd}`
+    }
+    return { start: iso(start), end: iso(end) }
+  }
+
+  const loadHistory = useCallback(async (token: string, year: number, month: number) => {
+    setHistoryLoading(true)
+    try {
+      const { start, end } = monthRange(year, month)
+      setHistory(await getScheduleHistory(token, start, end))
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Could not load the adherence calendar.')
+    } finally {
+      setHistoryLoading(false)
+    }
   }, [])
 
   const loadSchedule = useCallback(async (token: string) => {
@@ -111,6 +142,11 @@ function AppFrame() {
     return () => { active = false }
   }, [applyInteractionResult, navigate, session])
 
+  useEffect(() => {
+    if (!session) return
+    void loadHistory(session.access_token, historyMonth.year, historyMonth.month)
+  }, [historyMonth.month, historyMonth.year, loadHistory, session])
+
   const authenticate = async (
     input: { email: string; password: string; confirm_password?: string },
     isRegister: boolean,
@@ -124,6 +160,7 @@ function AppFrame() {
       setSession(nextSession)
       setMedications([])
       setSchedule(null)
+      setHistory([])
       setNotice('')
       setInteractionWarning('')
       navigate('/', { replace: true })
@@ -138,6 +175,7 @@ function AppFrame() {
     setSession(null)
     setMedications([])
     setSchedule(null)
+    setHistory([])
     setNotice('')
     setInteractionWarning('')
     navigate('/login', { replace: true })
@@ -156,6 +194,33 @@ function AppFrame() {
     if (nextList.length > 1) {
       await applyInteractionResult(session.access_token)
     }
+  }
+
+  const saveCustomMedication = async (input: CustomLeafletInput) => {
+    if (!session) return
+    if (medications.some((medication) => medication.drug_name.toLowerCase() === input.drug_name.toLowerCase())) {
+      throw new Error('This medication is already in your list.')
+    }
+
+    const sections: Record<string, string> = {}
+    if (input.posology) sections['4.2'] = input.posology
+    if (input.side_effects) sections['4.8'] = input.side_effects
+    if (input.interactions) sections['4.5'] = input.interactions
+
+    try {
+      await createCustomLeaflet(session.access_token, {
+        drug_name: input.drug_name,
+        leaflet_text: input.leaflet_text,
+        sections,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : ''
+      if (message !== 'You already added a custom leaflet for this medication.') {
+        throw error
+      }
+    }
+
+    await saveMedication(input.drug_name)
   }
 
   const removeMedication = async (medication: Medication) => {
@@ -188,6 +253,7 @@ function AppFrame() {
     await resetDashboard(session.access_token)
     setMedications([])
     setSchedule(null)
+    setHistory([])
     setInteractionWarning('')
     setNotice('Your dashboard was reset.')
   }
@@ -205,32 +271,41 @@ function AppFrame() {
     }
   }
 
+  const refreshHistory = async (token: string) => {
+    await loadHistory(token, historyMonth.year, historyMonth.month)
+  }
+
   const onGenerateSchedule = () => withScheduleWork(async () => {
     if (!session) return
     setSchedule(await generateSchedule(session.access_token))
+    await refreshHistory(session.access_token)
   })
 
   const onApproveSchedule = () => withScheduleWork(async () => {
     if (!session || !schedule) return
     setSchedule(await approveSchedule(session.access_token, schedule.schedule.id))
+    await refreshHistory(session.access_token)
   })
 
   const onRejectSchedule = () => withScheduleWork(async () => {
     if (!session || !schedule) return
     await rejectSchedule(session.access_token, schedule.schedule.id)
     setSchedule(null)
+    await refreshHistory(session.access_token)
   })
 
   const onTakeDose = (doseId: string) => withScheduleWork(async () => {
     if (!session) return
     await markDoseTaken(session.access_token, doseId)
     await loadSchedule(session.access_token)
+    await refreshHistory(session.access_token)
   })
 
   const onMissDose = (doseId: string) => withScheduleWork(async () => {
     if (!session) return
     await markDoseMissed(session.access_token, doseId)
     await loadSchedule(session.access_token)
+    await refreshHistory(session.access_token)
   })
 
   const onUpdateDoseTime = (doseId: string, scheduledTime: string) => withScheduleWork(async () => {
@@ -290,11 +365,17 @@ function AppFrame() {
             schedule={schedule}
             scheduleLoading={scheduleLoading}
             scheduleWorking={scheduleWorking}
+            history={history}
+            historyLoading={historyLoading}
+            onHistoryMonthChange={(year, month) => {
+              setHistoryMonth({ year, month })
+            }}
             now={now}
             onNavigate={navigateTo}
             onAddMedication={() => navigate('/medications')}
             greeting={greeting}
             onSaveMedication={saveMedication}
+            onSaveCustomMedication={saveCustomMedication}
             onRemoveMedication={removeMedication}
             onCheckInteractions={() => void runInteractionCheck()}
             onReset={runReset}

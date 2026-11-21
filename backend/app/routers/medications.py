@@ -46,7 +46,10 @@ async def add_medication(req: MedicationAddRequest, current_user: dict = Depends
             detail="Not found in database",
         )
 
-    matched_leaflet = leaflet_check.data[0]
+    matched_leaflet = next(
+        (row for row in leaflet_check.data if row.get("user_id") == user_id),
+        leaflet_check.data[0],
+    )
     leaflet_id = str(matched_leaflet["id"])
 
     res = supabase.table("active_medications").insert({

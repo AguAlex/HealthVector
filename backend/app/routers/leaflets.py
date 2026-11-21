@@ -35,25 +35,29 @@ async def create_custom_leaflet(req: LeafletCreateRequest, current_user: dict = 
     user_id = current_user["id"]
     drug_name = req.drug_name.strip()
     
-    # 1. Verificare duplicat
     existing = supabase.table("leaflets").select("id").eq("user_id", user_id).ilike("drug_name", drug_name).execute()
     if existing.data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Ai adăugat deja un prospect custom pentru medicamentul '{drug_name}'."
+            detail="You already added a custom leaflet for this medication.",
         )
-        
-    # 2. Generare INDEX VECTORIAL (Embedding) pentru RAG
-    embedding_vector = await RAGService.get_embedding(req.leaflet_text)
-    
-    # 3. Salvare în DB împreună cu vectorul indexat
-    res = supabase.table("leaflets").insert({
+
+    embedding_vector = None
+    try:
+        embedding_vector = await RAGService.get_embedding(req.leaflet_text)
+    except Exception:
+        embedding_vector = None
+
+    payload = {
         "user_id": user_id,
         "drug_name": drug_name,
         "leaflet_text": req.leaflet_text,
         "sections": req.sections or {},
-        "embedding": embedding_vector  # <-- INDEXUL VECTORIAL
-    }).execute()
+    }
+    if embedding_vector is not None:
+        payload["embedding"] = embedding_vector
+
+    res = supabase.table("leaflets").insert(payload).execute()
     
     created = res.data[0]
     return LeafletResponse(

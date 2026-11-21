@@ -100,6 +100,72 @@ class ScheduleService:
         return {"schedule": schedule, "doses": cls._doses_for(str(schedule["id"]))}
 
     @classmethod
+    def history(cls, user_id: str, start: str, end: str) -> list[dict[str, Any]]:
+        supabase = get_supabase_client()
+        res = (
+            supabase.table("schedules")
+            .select("*")
+            .eq("user_id", user_id)
+            .gte("date", start)
+            .lte("date", end)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        rows = res.data or []
+        by_date: dict[str, dict[str, Any]] = {}
+        rank = {"APPROVED": 0, "PENDING_APPROVAL": 1, "BLOCKED": 2, "SUPERSEDED": 3}
+        for row in rows:
+            day = str(row.get("date") or "")
+            if not day:
+                continue
+            current = by_date.get(day)
+            if current is None or rank.get(row.get("status"), 9) < rank.get(current.get("status"), 9):
+                by_date[day] = row
+
+        chosen = list(by_date.values())
+        if not chosen:
+            return []
+
+        ids = [str(item["id"]) for item in chosen]
+        doses_res = (
+            supabase.table("daily_schedule")
+            .select("schedule_id, status")
+            .in_("schedule_id", ids)
+            .execute()
+        )
+        counts: dict[str, dict[str, int]] = {schedule_id: {"total": 0, "taken": 0, "missed": 0} for schedule_id in ids}
+        for dose in doses_res.data or []:
+            schedule_id = str(dose.get("schedule_id") or "")
+            if schedule_id not in counts:
+                continue
+            counts[schedule_id]["total"] += 1
+            status = dose.get("status")
+            if status == "taken":
+                counts[schedule_id]["taken"] += 1
+            elif status == "missed":
+                counts[schedule_id]["missed"] += 1
+
+        summaries: list[dict[str, Any]] = []
+        for row in chosen:
+            schedule_id = str(row["id"])
+            tally = counts.get(schedule_id, {"total": 0, "taken": 0, "missed": 0})
+            total = tally["total"]
+            taken = tally["taken"]
+            summaries.append(
+                {
+                    "date": str(row["date"]),
+                    "schedule_id": schedule_id,
+                    "status": row.get("status") or "PENDING_APPROVAL",
+                    "total_doses": total,
+                    "taken_count": taken,
+                    "missed_count": tally["missed"],
+                    "all_taken": total > 0 and taken == total,
+                }
+            )
+        summaries.sort(key=lambda item: item["date"])
+        return summaries
+
+    @classmethod
     def generate(cls, user_id: str, proposed_by: str = "user") -> dict[str, Any]:
         supabase = get_supabase_client()
         day = cls._today()

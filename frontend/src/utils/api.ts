@@ -1,4 +1,4 @@
-import type { AuthSession, ChatResponse, Medication, SchedulePayload } from '../types'
+import type { AuthSession, ChatResponse, Medication, ScheduleDaySummary, SchedulePayload } from '../types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
@@ -22,6 +22,9 @@ function localizeBackendMessage(message: string, status?: number): string {
   }
   if (message === 'Medicamentul nu a fost găsit în lista ta.') {
     return 'Medication was not found in your list.'
+  }
+  if (message.startsWith('Ai adăugat deja un prospect custom')) {
+    return 'You already added a custom leaflet for this medication.'
   }
   return message
 }
@@ -52,8 +55,12 @@ async function request<T>(
   if (!response.ok) {
     let message = `Request failed (${response.status}).`
     try {
-      const body: { detail?: string } = await response.json()
-      if (body.detail) message = localizeBackendMessage(body.detail, response.status)
+      const body: { detail?: string | Array<{ msg?: string }> } = await response.json()
+      if (typeof body.detail === 'string') {
+        message = localizeBackendMessage(body.detail, response.status)
+      } else if (Array.isArray(body.detail) && body.detail[0]?.msg) {
+        message = body.detail[0].msg
+      }
     } catch (error) {
       console.error('Could not read the backend error response.', error)
     }
@@ -84,6 +91,20 @@ export function register(input: AuthInput & { confirm_password: string }): Promi
 
 export async function getMedications(token: string): Promise<Medication[]> {
   return request<Medication[]>('/api/medications', {}, token)
+}
+
+export function createCustomLeaflet(
+  token: string,
+  input: {
+    drug_name: string
+    leaflet_text: string
+    sections?: Record<string, string>
+  },
+): Promise<{ id: string; drug_name: string }> {
+  return request('/api/leaflets', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  }, token)
 }
 
 export function addMedication(token: string, drugName: string): Promise<Medication> {
@@ -141,6 +162,20 @@ export async function getTodaySchedule(token: string): Promise<SchedulePayload |
 
 export function generateSchedule(token: string): Promise<SchedulePayload> {
   return request<SchedulePayload>('/api/schedules/generate', { method: 'POST' }, token)
+}
+
+export async function getScheduleHistory(
+  token: string,
+  start: string,
+  end: string,
+): Promise<ScheduleDaySummary[]> {
+  const params = new URLSearchParams({ start, end })
+  const result = await request<{ days: ScheduleDaySummary[] }>(
+    `/api/schedules/history?${params.toString()}`,
+    {},
+    token,
+  )
+  return result.days
 }
 
 export function approveSchedule(token: string, scheduleId: string): Promise<SchedulePayload> {

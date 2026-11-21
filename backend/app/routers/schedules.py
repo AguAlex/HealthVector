@@ -1,12 +1,14 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.dependencies import get_current_user
 from app.schemas.schedule import (
     DoseResponse,
     DoseTimeUpdate,
+    ScheduleDaySummary,
     ScheduleExportResponse,
+    ScheduleHistoryResponse,
     ScheduleRecord,
     ScheduleResponse,
 )
@@ -50,6 +52,20 @@ def _serialize(payload: dict, now: datetime | None = None) -> ScheduleResponse:
         interaction=payload.get("interaction"),
         due_count=len(due_ids),
     )
+
+
+@router.get("/history", response_model=ScheduleHistoryResponse)
+async def get_schedule_history(
+    start: date = Query(..., description="Inclusive start date (YYYY-MM-DD)"),
+    end: date = Query(..., description="Inclusive end date (YYYY-MM-DD)"),
+    current_user: dict = Depends(get_current_user),
+):
+    if end < start:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="End date must be on or after start date.")
+    if (end - start).days > 62:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="History range cannot exceed 62 days.")
+    days = ScheduleService.history(current_user["id"], start.isoformat(), end.isoformat())
+    return ScheduleHistoryResponse(days=[ScheduleDaySummary(**item) for item in days])
 
 
 @router.get("/today", response_model=ScheduleResponse)

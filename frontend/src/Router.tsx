@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import type { AppPage, AuthSession, ChatResponse, Medication, SchedulePayload } from './types'
+import type { AppPage, AuthSession, ChatResponse, CustomLeafletInput, Medication, ScheduleDaySummary, SchedulePayload } from './types'
 import type { ColorTheme } from './utils/storage'
 
 const AssistantPage = lazy(() => import('./pages/AssistantPage'))
@@ -29,11 +29,15 @@ type RouterProps =
       schedule: SchedulePayload | null
       scheduleLoading: boolean
       scheduleWorking: boolean
+      history: ScheduleDaySummary[]
+      historyLoading: boolean
+      onHistoryMonthChange: (year: number, month: number) => void
       now: Date
       onNavigate: (page: AppPage) => void
       onAddMedication: () => void
       greeting: string
       onSaveMedication: (drugName: string) => Promise<void>
+      onSaveCustomMedication: (input: CustomLeafletInput) => Promise<void>
       onRemoveMedication: (medication: Medication) => Promise<void>
       onCheckInteractions: () => void
       onReset: () => Promise<void>
@@ -76,11 +80,15 @@ export default function Router(props: RouterProps) {
     schedule,
     scheduleLoading,
     scheduleWorking,
+    history,
+    historyLoading,
+    onHistoryMonthChange,
     now,
     onNavigate,
     onAddMedication,
     greeting,
     onSaveMedication,
+    onSaveCustomMedication,
     onRemoveMedication,
     onCheckInteractions,
     onReset,
@@ -105,6 +113,9 @@ export default function Router(props: RouterProps) {
             <OverviewPage
               medications={medications}
               schedule={schedule}
+              history={history}
+              historyLoading={historyLoading}
+              onHistoryMonthChange={onHistoryMonthChange}
               onNavigate={onNavigate}
               onAddMedication={onAddMedication}
               greeting={greeting}
@@ -137,6 +148,7 @@ export default function Router(props: RouterProps) {
             <MedicationsPage
               medications={medications}
               onSave={onSaveMedication}
+              onSaveCustom={onSaveCustomMedication}
               onRemove={onRemoveMedication}
               onCheckInteractions={onCheckInteractions}
               onReset={onReset}

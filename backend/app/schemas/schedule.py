@@ -35,5 +35,19 @@ class ScheduleExportResponse(BaseModel):
     text: str
 
 
+class ScheduleDaySummary(BaseModel):
+    date: str
+    schedule_id: str
+    status: str
+    total_doses: int
+    taken_count: int
+    missed_count: int
+    all_taken: bool
+
+
+class ScheduleHistoryResponse(BaseModel):
+    days: list[ScheduleDaySummary]
+
+
 class DoseTimeUpdate(BaseModel):
     scheduled_time: str = Field(..., example="14:30")

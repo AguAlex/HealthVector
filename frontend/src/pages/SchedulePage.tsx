@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { CheckCircleRounded, ScheduleRounded } from '@mui/icons-material'
-import { Button } from '@mui/material'
+import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material'
 import type { SchedulePayload } from '../types'
 
 type Props = {
@@ -61,6 +61,21 @@ export default function SchedulePage({
   const dueCount = schedule?.due_count ?? 0
   const taken = doses.filter((dose) => dose.status === 'taken').length
   const [draftTimes, setDraftTimes] = useState<Record<string, string>>({})
+  const [confirmRegenerate, setConfirmRegenerate] = useState(false)
+  const hasSchedule = Boolean(schedule)
+
+  const requestGenerate = () => {
+    if (hasSchedule) {
+      setConfirmRegenerate(true)
+      return
+    }
+    void onGenerate()
+  }
+
+  const confirmGenerate = async () => {
+    setConfirmRegenerate(false)
+    await onGenerate()
+  }
 
   const displayTime = (doseId: string, scheduledTime: string) => draftTimes[doseId] ?? clockValue(scheduledTime)
 
@@ -97,8 +112,8 @@ export default function SchedulePage({
           <Button variant="outlined" color="inherit" onClick={() => void onReset()} disabled={working}>
             Reset
           </Button>
-          <Button variant="contained" onClick={() => void onGenerate()} disabled={working}>
-            {working ? 'Working…' : 'Generate schedule'}
+          <Button variant="contained" onClick={requestGenerate} disabled={working}>
+            {working ? 'Working…' : hasSchedule ? 'Regenerate' : 'Generate schedule'}
           </Button>
         </div>
       </section>
@@ -135,7 +150,7 @@ export default function SchedulePage({
           <div className="empty-state">
             <div className="empty-icon"><ScheduleRounded /></div>
             <strong>No schedule for today</strong>
-            <p>Add medications with indexed leaflets, then generate a daily timeline (for example 08:00).</p>
+            <p>Add catalog medications or your own leaflet, then generate a daily timeline (for example 08:00).</p>
             <Button onClick={onAddMedication}>Manage medication list</Button>
           </div>
         </section>
@@ -238,6 +253,32 @@ export default function SchedulePage({
           </section>
         </>
       )}
+
+      <Dialog
+        open={confirmRegenerate}
+        onClose={() => {
+          if (!working) setConfirmRegenerate(false)
+        }}
+        aria-labelledby="regenerate-schedule-title"
+        aria-describedby="regenerate-schedule-description"
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle id="regenerate-schedule-title">Regenerate today’s schedule?</DialogTitle>
+        <DialogContent>
+          <DialogContentText id="regenerate-schedule-description">
+            This replaces the current plan. Taken and missed marks for today will be lost and you will need to approve the new proposal.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={() => setConfirmRegenerate(false)} disabled={working}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={() => void confirmGenerate()} disabled={working}>
+            Regenerate
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   )
 }
