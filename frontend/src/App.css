@@ -1037,6 +1037,71 @@
   padding: 24px clamp(17px, 3vw, 30px);
 }
 
+.proposal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 16px 0 22px;
+}
+
+.proposal-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #dce8df;
+  border-radius: 14px;
+  background: #f7fbf8;
+}
+
+.proposal-card.is-selected {
+  border-color: #6aa37c;
+  background: #eef7f0;
+}
+
+.proposal-card strong {
+  color: #31463a;
+  font-size: 14px;
+}
+
+.proposal-card span,
+.proposal-card li {
+  color: #66756c;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.proposal-card ul {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.custom-hours {
+  display: grid;
+  gap: 14px;
+  padding-top: 8px;
+  border-top: 1px solid #e4ece6;
+}
+
+.custom-hours-drug {
+  display: grid;
+  gap: 8px;
+}
+
+.custom-hours-drug > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.custom-hours-drug strong {
+  color: #31463a;
+  font-size: 13px;
+}
+
+.custom-hours-drug span {
+  color: #7a8a80;
+  font-size: 11px;
+}
+
 .schedule-date-row {
   display: flex;
   justify-content: space-between;
@@ -1546,10 +1611,43 @@
   gap: 9px;
 }
 
+.dosing-block {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #dce8df;
+  border-radius: 12px;
+  background: #fbfdfb;
+}
+
 .dose-time-row {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.dose-time-row > span {
+  min-width: 58px;
+  color: #5f6d64;
+  font-size: 12px;
+}
+
+.dose-time-row input[type='time'] {
+  flex: 1;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #d5e0d8;
+  border-radius: 10px;
+  background: #fff;
+  color: #243028;
+  font: inherit;
+}
+
+.medication-dosing-summary {
+  margin: 0 0 8px;
+  color: #66756c;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .dose-time-row .MuiIconButton-root {
@@ -2686,6 +2784,25 @@ html[data-theme='dark'] .schedule-dose-icon {
   background: #263d2e;
 }
 
+html[data-theme='dark'] .proposal-card {
+  background: #1c2b22;
+  border-color: #34483a;
+}
+
+html[data-theme='dark'] .proposal-card.is-selected {
+  background: #24382c;
+  border-color: #5f9a72;
+}
+
+html[data-theme='dark'] .proposal-card strong,
+html[data-theme='dark'] .custom-hours-drug strong {
+  color: #e0ebe3;
+}
+
+html[data-theme='dark'] .custom-hours {
+  border-top-color: #34483a;
+}
+
 html[data-theme='dark'] .schedule-summary {
   background: #1c2b22;
   border-color: #304337;
@@ -2770,6 +2887,22 @@ html[data-theme='dark'] .add-medication-card {
 
 html[data-theme='dark'] .add-medication-card:hover {
   background: #1f3326;
+}
+
+html[data-theme='dark'] .dosing-block {
+  background: #1c2b22;
+  border-color: #34483a;
+}
+
+html[data-theme='dark'] .dose-time-row > span,
+html[data-theme='dark'] .medication-dosing-summary {
+  color: #9aaca0;
+}
+
+html[data-theme='dark'] .dose-time-row input[type='time'] {
+  background: #15211b;
+  border-color: #34483a;
+  color: #e2ebe5;
 }
 
 html[data-theme='dark'] .catalog-guide {

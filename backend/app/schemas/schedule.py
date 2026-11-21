@@ -8,9 +8,23 @@ class DoseResponse(BaseModel):
     schedule_id: Optional[str] = None
     drug_name: str
     scheduled_time: str
+    quantity: Optional[str] = None
     status: str
     date: str
     due: bool = False
+
+
+class ProposalDose(BaseModel):
+    drug_name: str
+    scheduled_time: str
+    quantity: Optional[str] = None
+
+
+class ScheduleProposal(BaseModel):
+    key: str
+    label: str
+    summary: str
+    doses: list[ProposalDose]
 
 
 class ScheduleRecord(BaseModel):
@@ -22,13 +36,19 @@ class ScheduleRecord(BaseModel):
     interaction_severity: Optional[str] = "none"
     blocked_reason: Optional[str] = None
     approved_at: Optional[str] = None
+    selected_proposal: Optional[str] = None
 
 
 class ScheduleResponse(BaseModel):
     schedule: ScheduleRecord
     doses: list[DoseResponse]
+    proposals: list[ScheduleProposal] = []
     interaction: Optional[dict[str, Any]] = None
     due_count: int = 0
+
+
+class CustomScheduleRequest(BaseModel):
+    doses: list[ProposalDose]
 
 
 class ScheduleExportResponse(BaseModel):

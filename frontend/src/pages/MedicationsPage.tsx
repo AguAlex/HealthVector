@@ -6,12 +6,13 @@ import {
   ScienceOutlined,
 } from '@mui/icons-material'
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, IconButton } from '@mui/material'
-import type { CustomLeafletInput, Medication } from '../types'
+import type { CustomLeafletInput, LeafletCatalogItem, Medication, MedicationDosing } from '../types'
 import MedicationDialog from '../components/MedicationDialog'
 
 type Props = {
   medications: Medication[]
-  onSave: (drugName: string) => Promise<void>
+  catalog: LeafletCatalogItem[]
+  onSave: (drugName: string, dosing?: MedicationDosing) => Promise<void>
   onSaveCustom: (input: CustomLeafletInput) => Promise<void>
   onRemove: (medication: Medication) => Promise<void>
   onCheckInteractions: () => void
@@ -22,6 +23,7 @@ type Props = {
 
 export default function MedicationsPage({
   medications,
+  catalog,
   onSave,
   onSaveCustom,
   onRemove,
@@ -42,8 +44,8 @@ export default function MedicationsPage({
     setDialogOpen(true)
   }
 
-  const save = async (drugName: string) => {
-    await onSave(drugName)
+  const save = async (drugName: string, dosing?: MedicationDosing) => {
+    await onSave(drugName, dosing)
   }
 
   const confirmRemoval = async () => {
@@ -66,7 +68,7 @@ export default function MedicationsPage({
         <div>
           <div className="eyebrow">YOUR PERSONAL MEDICATION LIST</div>
           <h1>Medications</h1>
-          <p>Add a catalog name, or paste your own leaflet if the medication is not in the database.</p>
+          <p>Add a catalog name or your own leaflet, then set doses per day, times, and amount.</p>
         </div>
         <div className="page-title-actions">
           <Button color="inherit" onClick={() => void onReset()}>Reset</Button>
@@ -102,6 +104,16 @@ export default function MedicationsPage({
               <div className="medication-card-content">
                 <span className="eyebrow">MEDICATION</span>
                 <h2>{medication.drug_name}</h2>
+                {medication.dosing?.doses_per_day ? (
+                  <p className="medication-dosing-summary">
+                    {medication.dosing.doses_per_day}× daily
+                    {medication.dosing.quantity ? ` · ${medication.dosing.quantity}` : ''}
+                    {' · '}
+                    {medication.dosing.doses_per_day === 1
+                      ? 'every 24h'
+                      : `every ${medication.dosing.interval_hours}h`}
+                  </p>
+                ) : null}
                 <button
                   className="side-effects-toggle"
                   onClick={() => setExpandedId((current) => current === medication.id ? undefined : medication.id)}
@@ -110,7 +122,7 @@ export default function MedicationsPage({
                 </button>
                 {expandedId === medication.id && (
                   <p className="side-effects-text">
-                    {medication.side_effects || 'No §4.8 side-effect section is stored for this leaflet.'}
+                    {medication.side_effects || 'No side-effect details are stored for this leaflet.'}
                   </p>
                 )}
                 <div className="medication-card-footer">
@@ -141,7 +153,7 @@ export default function MedicationsPage({
           <div className="empty-state">
             <div className="empty-icon"><MedicationOutlined /></div>
             <strong>Your medication list is a blank slate</strong>
-            <p>Add a catalog medication, or paste your own official leaflet to register a new name.</p>
+            <p>Add a catalog medication, or paste a leaflet and set how many times a day you take it.</p>
             <div className="empty-actions">
               <Button variant="contained" startIcon={<AddRounded />} onClick={() => openNew('catalog')}>Add your first medication</Button>
               <Button color="inherit" onClick={() => openNew('custom')}>Add with leaflet</Button>
@@ -157,6 +169,7 @@ export default function MedicationsPage({
         open={dialogOpen}
         initialMode={dialogMode}
         onClose={() => setDialogOpen(false)}
+        catalog={catalog}
         onSave={save}
         onSaveCustom={onSaveCustom}
       />

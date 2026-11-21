@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
-import type { AppPage, AuthSession, ChatResponse, CustomLeafletInput, Medication, ScheduleDaySummary, SchedulePayload } from './types'
+import type { AppPage, AuthSession, ChatResponse, CustomLeafletInput, LeafletCatalogItem, Medication, MedicationDosing, ScheduleDaySummary, SchedulePayload } from './types'
 import type { ColorTheme } from './utils/storage'
 
 const AssistantPage = lazy(() => import('./pages/AssistantPage'))
@@ -26,6 +26,7 @@ type RouterProps =
   | {
       session: AuthSession
       medications: Medication[]
+      catalog: LeafletCatalogItem[]
       schedule: SchedulePayload | null
       scheduleLoading: boolean
       scheduleWorking: boolean
@@ -36,7 +37,7 @@ type RouterProps =
       onNavigate: (page: AppPage) => void
       onAddMedication: () => void
       greeting: string
-      onSaveMedication: (drugName: string) => Promise<void>
+      onSaveMedication: (drugName: string, dosing?: MedicationDosing) => Promise<void>
       onSaveCustomMedication: (input: CustomLeafletInput) => Promise<void>
       onRemoveMedication: (medication: Medication) => Promise<void>
       onCheckInteractions: () => void
@@ -47,9 +48,10 @@ type RouterProps =
       onGenerateSchedule: () => Promise<void>
       onApproveSchedule: () => Promise<void>
       onRejectSchedule: () => Promise<void>
+      onSelectProposal: (proposalKey: string) => Promise<void>
+      onSaveCustomSchedule: (doses: { drug_name: string; scheduled_time: string }[]) => Promise<void>
       onTakeDose: (doseId: string) => Promise<void>
       onMissDose: (doseId: string) => Promise<void>
-      onUpdateDoseTime: (doseId: string, scheduledTime: string) => Promise<void>
       onExportSchedule: () => Promise<void>
     }
 
@@ -77,6 +79,7 @@ export default function Router(props: RouterProps) {
   const {
     session,
     medications,
+    catalog,
     schedule,
     scheduleLoading,
     scheduleWorking,
@@ -98,9 +101,10 @@ export default function Router(props: RouterProps) {
     onGenerateSchedule,
     onApproveSchedule,
     onRejectSchedule,
+    onSelectProposal,
+    onSaveCustomSchedule,
     onTakeDose,
     onMissDose,
-    onUpdateDoseTime,
     onExportSchedule,
   } = props
 
@@ -128,6 +132,7 @@ export default function Router(props: RouterProps) {
           element={
             <SchedulePage
               schedule={schedule}
+              medications={medications}
               loading={scheduleLoading}
               working={scheduleWorking}
               onGenerate={onGenerateSchedule}
@@ -135,7 +140,8 @@ export default function Router(props: RouterProps) {
               onReject={onRejectSchedule}
               onTake={onTakeDose}
               onMiss={onMissDose}
-              onUpdateTime={onUpdateDoseTime}
+              onSelectProposal={onSelectProposal}
+              onSaveCustom={onSaveCustomSchedule}
               onExport={onExportSchedule}
               onReset={onReset}
               onAddMedication={onAddMedication}
@@ -147,6 +153,7 @@ export default function Router(props: RouterProps) {
           element={
             <MedicationsPage
               medications={medications}
+              catalog={catalog}
               onSave={onSaveMedication}
               onSaveCustom={onSaveCustomMedication}
               onRemove={onRemoveMedication}

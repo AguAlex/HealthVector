@@ -1,4 +1,3 @@
-import re
 from datetime import date, datetime, time, timezone
 from typing import Any
 
@@ -6,59 +5,19 @@ from fastapi import HTTPException, status
 
 from app.core.audit import audit
 from app.core.database import get_supabase_client
+from app.services.dosing import (
+    build_proposals,
+    normalize_time,
+    resolve_regimen,
+    validate_plan_times,
+)
 from app.services.interaction_service import InteractionService
-
-_DEFAULT_TIMES = {
-    "paracetamol": ["08:00", "14:00", "20:00"],
-    "aspirin": ["08:00"],
-    "warfarin": ["18:00"],
-    "ibuprofen": ["08:00", "14:00", "20:00"],
-    "simvastatin": ["18:00"],
-    "clarithromycin": ["08:00", "20:00"],
-    "fluoxetine": ["08:00"],
-    "sertraline": ["08:00"],
-    "digoxin": ["08:00"],
-    "lisinopril": ["08:00"],
-    "spironolactone": ["08:00"],
-    "potassium chloride": ["08:00", "20:00"],
-    "methotrexate": ["08:00"],
-    "ciprofloxacin": ["08:00", "20:00"],
-    "amiodarone": ["08:00"],
-    "lithium": ["08:00", "20:00"],
-}
-
-_TIME_PATTERN = re.compile(r"^(\d{1,2}):(\d{2})(?::\d{2})?$")
 
 
 class ScheduleService:
     @staticmethod
-    def _times_for(drug_name: str, section_42: str | None) -> list[str]:
-        text = (section_42 or "").lower()
-        if "18:00" in text or "seara" in text or "evening" in text:
-            return ["18:00"]
-        if "4-6" in text or "4–6" in text or "every 4" in text:
-            return ["08:00", "14:00", "20:00"]
-        if "6-8" in text or "6–8" in text or "every 6" in text:
-            return ["08:00", "14:00", "20:00"]
-        if "o dată" in text or "once" in text:
-            return ["08:00"]
-        return _DEFAULT_TIMES.get(drug_name.strip().lower(), ["08:00"])
-
-    @staticmethod
     def _normalize_time(value: str) -> str:
-        match = _TIME_PATTERN.match((value or "").strip())
-        if not match:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Scheduled time must be in HH:MM format.",
-            )
-        hour, minute = int(match.group(1)), int(match.group(2))
-        if hour > 23 or minute > 59:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Scheduled time must be a valid clock time.",
-            )
-        return f"{hour:02d}:{minute:02d}"
+        return normalize_time(value)
 
     @staticmethod
     def _today() -> str:
@@ -97,7 +56,11 @@ class ScheduleService:
         schedule = cls._active_schedule(user_id)
         if not schedule:
             return None
-        return {"schedule": schedule, "doses": cls._doses_for(str(schedule["id"]))}
+        return {
+            "schedule": schedule,
+            "doses": cls._doses_for(str(schedule["id"])),
+            "proposals": schedule.get("proposals") or [],
+        }
 
     @classmethod
     def history(cls, user_id: str, start: str, end: str) -> list[dict[str, Any]]:
@@ -166,12 +129,188 @@ class ScheduleService:
         return summaries
 
     @classmethod
+    def _regimens_for(cls, medications: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        supabase = get_supabase_client()
+        leaflet_ids = [item["leaflet_id"] for item in medications if item.get("leaflet_id")]
+        leaflet_map: dict[str, dict[str, Any]] = {}
+        if leaflet_ids:
+            leaflets = supabase.table("leaflets").select("id, drug_name, sections").in_("id", leaflet_ids).execute()
+            leaflet_map = {str(item["id"]): item for item in (leaflets.data or [])}
+
+        regimens: list[dict[str, Any]] = []
+        for med in medications:
+            leaflet = leaflet_map.get(str(med.get("leaflet_id") or ""))
+            sections = (leaflet or {}).get("sections") or {}
+            section_42 = sections.get("4.2") if isinstance(sections, dict) else None
+            resolved = resolve_regimen(med.get("dosing"), med["drug_name"], section_42)
+            regimens.append(
+                {
+                    "drug_name": med["drug_name"],
+                    "leaflet_id": med.get("leaflet_id"),
+                    "doses_per_day": resolved["doses_per_day"],
+                    "interval_hours": resolved["interval_hours"],
+                    "quantity": resolved.get("quantity"),
+                }
+            )
+        return regimens
+
+    @classmethod
+    def _regimen_map(cls, user_id: str) -> dict[str, dict[str, Any]]:
+        supabase = get_supabase_client()
+        meds = (
+            supabase.table("active_medications")
+            .select("id, drug_name, leaflet_id, dosing")
+            .eq("user_id", user_id)
+            .execute()
+        )
+        return {item["drug_name"]: item for item in cls._regimens_for(meds.data or [])}
+
+    @classmethod
+    def _replace_doses(
+        cls,
+        user_id: str,
+        schedule_id: str,
+        day: str,
+        doses: list[dict[str, Any]],
+        leaflet_by_name: dict[str, Any] | None = None,
+    ) -> None:
+        supabase = get_supabase_client()
+        supabase.table("daily_schedule").delete().eq("schedule_id", schedule_id).eq("user_id", user_id).execute()
+        if not doses:
+            return
+        leaflet_by_name = leaflet_by_name or {}
+        rows = [
+            {
+                "user_id": user_id,
+                "schedule_id": schedule_id,
+                "leaflet_id": leaflet_by_name.get(item["drug_name"]),
+                "drug_name": item["drug_name"],
+                "scheduled_time": normalize_time(str(item["scheduled_time"])),
+                "quantity": item.get("quantity"),
+                "status": "scheduled",
+                "date": day,
+            }
+            for item in doses
+        ]
+        supabase.table("daily_schedule").insert(rows).execute()
+
+    @classmethod
+    def _payload(cls, user_id: str, interaction: dict[str, Any] | None = None) -> dict[str, Any]:
+        payload = cls.get_today(user_id)
+        if not payload:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found.")
+        if interaction is None:
+            names = list({item["drug_name"] for item in payload["doses"]})
+            if not names:
+                names = [
+                    item["drug_name"]
+                    for proposal in (payload.get("proposals") or [])
+                    for item in proposal.get("doses") or []
+                ]
+            payload["interaction"] = InteractionService.check(list(dict.fromkeys(names)))
+        else:
+            payload["interaction"] = interaction
+        return payload
+
+    @classmethod
+    def apply_proposal(cls, user_id: str, schedule_id: str, proposal_key: str) -> dict[str, Any]:
+        supabase = get_supabase_client()
+        res = (
+            supabase.table("schedules")
+            .select("*")
+            .eq("id", schedule_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if not res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found.")
+        schedule = res.data[0]
+        if schedule["status"] == "BLOCKED":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=schedule.get("blocked_reason")
+                or "This schedule is blocked because of a high-severity interaction.",
+            )
+        if schedule["status"] not in ("PENDING_APPROVAL", "APPROVED"):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This schedule can no longer be edited.")
+
+        proposals = schedule.get("proposals") or []
+        chosen = next((item for item in proposals if item.get("key") == proposal_key), None)
+        if not chosen:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="That schedule option was not found.")
+
+        regimens = cls._regimen_map(user_id)
+        plan: dict[str, list[str]] = {}
+        for dose in chosen.get("doses") or []:
+            plan.setdefault(dose["drug_name"], []).append(dose["scheduled_time"])
+        validate_plan_times(plan, regimens)
+
+        leaflet_by_name = {name: item.get("leaflet_id") for name, item in regimens.items()}
+        cls._replace_doses(user_id, schedule_id, str(schedule["date"]), chosen["doses"], leaflet_by_name)
+        updates: dict[str, Any] = {"selected_proposal": proposal_key}
+        if schedule["status"] == "APPROVED":
+            updates["status"] = "PENDING_APPROVAL"
+            updates["approved_at"] = None
+            updates["proposed_by"] = "user"
+        supabase.table("schedules").update(updates).eq("id", schedule_id).eq("user_id", user_id).execute()
+        audit("schedule_proposal_selected", proposal_key)
+        return cls._payload(user_id)
+
+    @classmethod
+    def apply_custom(cls, user_id: str, schedule_id: str, doses: list[dict[str, Any]]) -> dict[str, Any]:
+        supabase = get_supabase_client()
+        res = (
+            supabase.table("schedules")
+            .select("*")
+            .eq("id", schedule_id)
+            .eq("user_id", user_id)
+            .execute()
+        )
+        if not res.data:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found.")
+        schedule = res.data[0]
+        if schedule["status"] == "BLOCKED":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=schedule.get("blocked_reason")
+                or "This schedule is blocked because of a high-severity interaction.",
+            )
+        if schedule["status"] not in ("PENDING_APPROVAL", "APPROVED"):
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This schedule can no longer be edited.")
+
+        regimens = cls._regimen_map(user_id)
+        plan: dict[str, list[str]] = {}
+        quantity_by_drug = {name: item.get("quantity") for name, item in regimens.items()}
+        normalized: list[dict[str, Any]] = []
+        for item in doses:
+            drug_name = str(item.get("drug_name") or "").strip()
+            scheduled = normalize_time(str(item.get("scheduled_time") or ""))
+            plan.setdefault(drug_name, []).append(scheduled)
+            normalized.append(
+                {
+                    "drug_name": drug_name,
+                    "scheduled_time": scheduled,
+                    "quantity": item.get("quantity") or quantity_by_drug.get(drug_name),
+                }
+            )
+        validate_plan_times(plan, regimens)
+        leaflet_by_name = {name: item.get("leaflet_id") for name, item in regimens.items()}
+        cls._replace_doses(user_id, schedule_id, str(schedule["date"]), normalized, leaflet_by_name)
+        updates: dict[str, Any] = {"selected_proposal": "custom", "proposed_by": "user"}
+        if schedule["status"] == "APPROVED":
+            updates["status"] = "PENDING_APPROVAL"
+            updates["approved_at"] = None
+        supabase.table("schedules").update(updates).eq("id", schedule_id).eq("user_id", user_id).execute()
+        audit("schedule_custom_saved", "custom", dose_count=len(normalized))
+        return cls._payload(user_id)
+
+    @classmethod
     def generate(cls, user_id: str, proposed_by: str = "user") -> dict[str, Any]:
         supabase = get_supabase_client()
         day = cls._today()
         meds = (
             supabase.table("active_medications")
-            .select("id, drug_name, leaflet_id")
+            .select("id, drug_name, leaflet_id, dosing")
             .eq("user_id", user_id)
             .execute()
         )
@@ -198,6 +337,9 @@ class ScheduleService:
             for row in existing.data:
                 supabase.table("schedules").update({"status": "SUPERSEDED"}).eq("id", row["id"]).execute()
 
+        regimens = cls._regimens_for(meds.data)
+        proposals = build_proposals(regimens)
+
         created = (
             supabase.table("schedules")
             .insert(
@@ -208,6 +350,8 @@ class ScheduleService:
                     "proposed_by": proposed_by if proposed_by in ("user", "ai") else "user",
                     "interaction_severity": interaction["severity"],
                     "blocked_reason": blocked_reason,
+                    "proposals": proposals,
+                    "selected_proposal": None,
                 }
             )
             .execute()
@@ -215,40 +359,18 @@ class ScheduleService:
         schedule = created.data[0]
         schedule_id = str(schedule["id"])
 
-        leaflet_ids = [item["leaflet_id"] for item in meds.data if item.get("leaflet_id")]
-        leaflet_map: dict[str, dict[str, Any]] = {}
-        if leaflet_ids:
-            leaflets = supabase.table("leaflets").select("id, drug_name, sections").in_("id", leaflet_ids).execute()
-            leaflet_map = {str(item["id"]): item for item in (leaflets.data or [])}
-
-        dose_rows: list[dict[str, Any]] = []
-        for med in meds.data:
-            leaflet = leaflet_map.get(str(med.get("leaflet_id") or ""))
-            sections = (leaflet or {}).get("sections") or {}
-            section_42 = sections.get("4.2") if isinstance(sections, dict) else None
-            for scheduled in cls._times_for(med["drug_name"], section_42):
-                dose_rows.append(
-                    {
-                        "user_id": user_id,
-                        "schedule_id": schedule_id,
-                        "leaflet_id": med.get("leaflet_id"),
-                        "drug_name": med["drug_name"],
-                        "scheduled_time": scheduled,
-                        "status": "scheduled",
-                        "date": day,
-                    }
-                )
-
-        if dose_rows:
-            supabase.table("daily_schedule").insert(dose_rows).execute()
-
         audit(
             "schedule_generated",
             schedule_status,
             interaction_severity=interaction["severity"],
-            dose_count=len(dose_rows),
+            proposal_count=len(proposals),
         )
-        return {"schedule": schedule, "doses": cls._doses_for(schedule_id), "interaction": interaction}
+        return {
+            "schedule": schedule,
+            "doses": [],
+            "proposals": proposals,
+            "interaction": interaction,
+        }
 
     @classmethod
     def approve(cls, user_id: str, schedule_id: str) -> dict[str, Any]:
@@ -275,6 +397,11 @@ class ScheduleService:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Only a pending schedule can be approved. Saving without approval is refused.",
+            )
+        if not cls._doses_for(schedule_id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Choose one of the proposed plans, or save custom hours, before approving.",
             )
 
         updated = (
@@ -381,6 +508,13 @@ class ScheduleService:
                 detail="This schedule can no longer be edited.",
             )
 
+        current_doses = cls._doses_for(str(schedule_id))
+        plan: dict[str, list[str]] = {}
+        for item in current_doses:
+            time_value = normalized if str(item["id"]) == str(dose_id) else str(item.get("scheduled_time") or "")[:5]
+            plan.setdefault(item["drug_name"], []).append(time_value)
+        validate_plan_times(plan, cls._regimen_map(user_id))
+
         supabase.table("daily_schedule").update({"scheduled_time": normalized}).eq("id", dose_id).eq(
             "user_id", user_id
         ).execute()
@@ -393,12 +527,7 @@ class ScheduleService:
         else:
             audit("dose_time_updated", schedule["status"])
 
-        payload = cls.get_today(user_id)
-        if not payload:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found.")
-        names = list({item["drug_name"] for item in payload["doses"]})
-        payload["interaction"] = InteractionService.check(names)
-        return payload
+        return cls._payload(user_id)
 
     @classmethod
     def export_text(cls, user_id: str) -> str:
@@ -414,7 +543,9 @@ class ScheduleService:
         ]
         for dose in payload["doses"]:
             raw_time = str(dose.get("scheduled_time") or "")[:5]
-            lines.append(f"{raw_time} {dose.get('drug_name')} — {dose.get('status')}")
+            quantity = dose.get("quantity")
+            extra = f" ({quantity})" if quantity else ""
+            lines.append(f"{raw_time} {dose.get('drug_name')}{extra} — {dose.get('status')}")
         return "\n".join(lines)
 
     @classmethod

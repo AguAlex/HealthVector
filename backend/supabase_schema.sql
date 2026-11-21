@@ -43,6 +43,7 @@ CREATE TABLE IF NOT EXISTS active_medications (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     leaflet_id UUID NOT NULL REFERENCES leaflets(id) ON DELETE CASCADE,
     drug_name TEXT NOT NULL,
+    dosing JSONB DEFAULT '{}'::jsonb,
     added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     CONSTRAINT unique_user_active_drug UNIQUE(user_id, drug_name)
 );
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS daily_schedule (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     drug_name TEXT NOT NULL,
     scheduled_time TIME NOT NULL,
+    quantity TEXT,
     status TEXT CHECK (status IN ('scheduled', 'taken', 'missed')) DEFAULT 'scheduled',
     date DATE DEFAULT CURRENT_DATE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -238,6 +240,8 @@ CREATE TABLE IF NOT EXISTS schedules (
     interaction_severity TEXT CHECK (interaction_severity IN ('none', 'moderate', 'high')) DEFAULT 'none',
     blocked_reason TEXT,
     approved_at TIMESTAMP WITH TIME ZONE,
+    proposals JSONB DEFAULT '[]'::jsonb,
+    selected_proposal TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

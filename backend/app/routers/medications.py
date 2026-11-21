@@ -3,6 +3,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from app.core.database import get_supabase_client
 from app.core.dependencies import get_current_user
 from app.schemas.medication import MedicationAddRequest, MedicationResponse, InteractionCheckResponse
+from app.services.dosing import suggested_from_leaflet, validate_dosing
 from app.services.interaction_service import InteractionService
 
 router = APIRouter(prefix="/api/medications", tags=["Medications"])
@@ -16,6 +17,10 @@ def _side_effects(sections: dict | None) -> str | None:
 
 def _to_response(item: dict, leaflet: dict | None = None) -> MedicationResponse:
     sections = (leaflet or {}).get("sections") if leaflet else item.get("sections")
+    dosing = item.get("dosing")
+    if not isinstance(dosing, dict) or not dosing.get("times"):
+        suggestion = suggested_from_leaflet(item["drug_name"], sections if isinstance(sections, dict) else None)
+        dosing = suggestion
     return MedicationResponse(
         id=str(item["id"]),
         user_id=str(item["user_id"]),
@@ -23,6 +28,7 @@ def _to_response(item: dict, leaflet: dict | None = None) -> MedicationResponse:
         added_at=str(item["added_at"]),
         leaflet_id=str(item["leaflet_id"]) if item.get("leaflet_id") else None,
         side_effects=_side_effects(sections if isinstance(sections, dict) else None),
+        dosing=dosing,
     )
 
 
@@ -51,11 +57,15 @@ async def add_medication(req: MedicationAddRequest, current_user: dict = Depends
         leaflet_check.data[0],
     )
     leaflet_id = str(matched_leaflet["id"])
+    dosing = validate_dosing(req.dosing.model_dump() if req.dosing else None)
+    if dosing is None:
+        dosing = suggested_from_leaflet(matched_leaflet["drug_name"], matched_leaflet.get("sections"))
 
     res = supabase.table("active_medications").insert({
         "user_id": user_id,
         "leaflet_id": leaflet_id,
         "drug_name": matched_leaflet["drug_name"],
+        "dosing": dosing,
     }).execute()
 
     added_item = res.data[0]

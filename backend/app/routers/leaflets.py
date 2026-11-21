@@ -1,10 +1,41 @@
 from fastapi import APIRouter, HTTPException, status, Depends
 from app.core.database import get_supabase_client
 from app.core.dependencies import get_current_user
-from app.schemas.leaflet import LeafletCreateRequest, LeafletResponse
+from app.schemas.leaflet import LeafletCatalogItem, LeafletCreateRequest, LeafletResponse
+from app.services.dosing import posology_sentence, suggested_from_leaflet, validate_dosing
 from app.services.rag_service import RAGService
 
 router = APIRouter(prefix="/api/leaflets", tags=["Leaflets & Knowledge Base"])
+
+@router.get("/catalog", response_model=list[LeafletCatalogItem])
+async def get_leaflet_catalog(current_user: dict = Depends(get_current_user)):
+    supabase = get_supabase_client()
+    user_id = current_user["id"]
+    res = (
+        supabase.table("leaflets")
+        .select("drug_name, user_id, sections")
+        .or_(f"user_id.is.null,user_id.eq.{user_id}")
+        .execute()
+    )
+    unique: dict[str, LeafletCatalogItem] = {}
+    for item in res.data or []:
+        name = str(item.get("drug_name") or "").strip()
+        if not name:
+            continue
+        is_default = item.get("user_id") is None
+        key = name.lower()
+        current = unique.get(key)
+        if current is None or (current.is_default and not is_default):
+            suggestion = suggested_from_leaflet(name, item.get("sections"))
+            unique[key] = LeafletCatalogItem(
+                drug_name=name,
+                is_default=is_default,
+                suggested_doses_per_day=int(suggestion["doses_per_day"]),
+                suggested_interval_hours=float(suggestion["interval_hours"]),
+                suggested_quantity=suggestion.get("quantity"),
+            )
+    return sorted(unique.values(), key=lambda item: item.drug_name.lower())
+
 
 @router.get("", response_model=list[LeafletResponse])
 async def get_available_leaflets(current_user: dict = Depends(get_current_user)):
@@ -48,11 +79,20 @@ async def create_custom_leaflet(req: LeafletCreateRequest, current_user: dict = 
     except Exception:
         embedding_vector = None
 
+    sections = dict(req.sections or {})
+    dosing = validate_dosing(req.dosing.model_dump() if req.dosing else None)
+    if dosing:
+        sections["4.2"] = posology_sentence(dosing)
+    if req.side_effects and req.side_effects.strip():
+        sections["4.8"] = req.side_effects.strip()
+    if req.interactions and req.interactions.strip():
+        sections["4.5"] = req.interactions.strip()
+
     payload = {
         "user_id": user_id,
         "drug_name": drug_name,
         "leaflet_text": req.leaflet_text,
-        "sections": req.sections or {},
+        "sections": sections,
     }
     if embedding_vector is not None:
         payload["embedding"] = embedding_vector

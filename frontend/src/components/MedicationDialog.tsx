@@ -1,41 +1,28 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { CloseRounded } from '@mui/icons-material'
-import { Autocomplete, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, TextField } from '@mui/material'
-import type { CustomLeafletInput } from '../types'
-import { searchMedicationCatalog, type MedicationCatalogOption } from '../utils/rxterms'
-
-const leafletExamples = [
-  'Paracetamol',
-  'Aspirin',
-  'Warfarin',
-  'Ibuprofen',
-  'Simvastatin',
-  'Clarithromycin',
-  'Fluoxetine',
-  'Sertraline',
-  'Digoxin',
-  'Lisinopril',
-  'Spironolactone',
-  'Potassium chloride',
-  'Methotrexate',
-  'Ciprofloxacin',
-  'Amiodarone',
-  'Lithium',
-]
+import { Autocomplete, Button, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem, TextField } from '@mui/material'
+import type { CustomLeafletInput, LeafletCatalogItem, MedicationDosing } from '../types'
 
 type Mode = 'catalog' | 'custom'
+
+function defaultInterval(dosesPerDay: number) {
+  if (dosesPerDay <= 1) return 24
+  return Number((24 / dosesPerDay).toFixed(2))
+}
 
 type Props = {
   open: boolean
   initialMode?: Mode
+  catalog: LeafletCatalogItem[]
   onClose: () => void
-  onSave: (drugName: string) => Promise<void>
+  onSave: (drugName: string, dosing?: MedicationDosing) => Promise<void>
   onSaveCustom: (input: CustomLeafletInput) => Promise<void>
 }
 
 export default function MedicationDialog({
   open,
   initialMode = 'catalog',
+  catalog,
   onClose,
   onSave,
   onSaveCustom,
@@ -43,12 +30,12 @@ export default function MedicationDialog({
   const [mode, setMode] = useState<Mode>(initialMode)
   const [name, setName] = useState('')
   const [leafletText, setLeafletText] = useState('')
-  const [posology, setPosology] = useState('')
+  const [dosesPerDay, setDosesPerDay] = useState(1)
+  const [intervalHours, setIntervalHours] = useState(24)
+  const [quantity, setQuantity] = useState('')
   const [sideEffects, setSideEffects] = useState('')
   const [interactions, setInteractions] = useState('')
-  const [catalogOptions, setCatalogOptions] = useState<MedicationCatalogOption[]>([])
-  const [catalogLoading, setCatalogLoading] = useState(false)
-  const [catalogError, setCatalogError] = useState('')
+  const [intervalTouched, setIntervalTouched] = useState(false)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -56,40 +43,35 @@ export default function MedicationDialog({
     if (open) setMode(initialMode)
   }, [initialMode, open])
 
-  useEffect(() => {
-    const term = name.trim()
-    if (mode !== 'catalog' || term.length < 2) return
+  const examples = useMemo(
+    () => catalog.filter((item) => item.is_default).map((item) => item.drug_name).slice(0, 16),
+    [catalog],
+  )
 
-    const controller = new AbortController()
-    const timeout = window.setTimeout(() => {
-      void searchMedicationCatalog(term, controller.signal)
-        .then(setCatalogOptions)
-        .catch((lookupError: unknown) => {
-          if (controller.signal.aborted) return
-          setCatalogError(lookupError instanceof Error
-            ? lookupError.message
-            : 'Medication catalog is unavailable. You can still enter a name.')
-          setCatalogOptions([])
-        })
-        .finally(() => {
-          if (!controller.signal.aborted) setCatalogLoading(false)
-        })
-    }, 300)
+  const applyCatalogSuggestion = (item: LeafletCatalogItem | undefined) => {
+    if (!item) return
+    const count = item.suggested_doses_per_day || 1
+    setDosesPerDay(count)
+    setIntervalHours(item.suggested_interval_hours ?? defaultInterval(count))
+    setIntervalTouched(false)
+    if (item.suggested_quantity) setQuantity(item.suggested_quantity)
+  }
 
-    return () => {
-      window.clearTimeout(timeout)
-      controller.abort()
-    }
-  }, [mode, name])
+  const catalogMatch = useMemo(() => {
+    const query = name.trim().toLowerCase()
+    if (!query) return undefined
+    return catalog.find((item) => item.drug_name.toLowerCase() === query)
+  }, [catalog, name])
 
   const reset = () => {
     setName('')
     setLeafletText('')
-    setPosology('')
+    setDosesPerDay(1)
+    setIntervalHours(24)
+    setQuantity('')
     setSideEffects('')
     setInteractions('')
-    setCatalogOptions([])
-    setCatalogError('')
+    setIntervalTouched(false)
     setError('')
     setMode(initialMode)
   }
@@ -99,11 +81,20 @@ export default function MedicationDialog({
     onClose()
   }
 
-  const switchToCustom = () => {
-    setMode('custom')
-    setError('')
-    setCatalogError('')
+  const changeDoseCount = (count: number) => {
+    setDosesPerDay(count)
+    if (count === 1) {
+      setIntervalHours(24)
+      return
+    }
+    if (!intervalTouched) setIntervalHours(defaultInterval(count))
   }
+
+  const dosingPayload = (): MedicationDosing => ({
+    doses_per_day: dosesPerDay,
+    interval_hours: dosesPerDay === 1 ? 24 : intervalHours,
+    quantity: quantity.trim() || undefined,
+  })
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -115,20 +106,25 @@ export default function MedicationDialog({
       setError('Paste at least a short leaflet excerpt (20 characters or more).')
       return
     }
+    if (dosesPerDay > 1 && intervalHours * (dosesPerDay - 1) >= 24) {
+      setError('That interval is too long to fit this many doses in one day.')
+      return
+    }
 
     setSaving(true)
     setError('')
+    const dosing = dosingPayload()
     try {
       if (mode === 'custom') {
         await onSaveCustom({
           drug_name: name.trim(),
           leaflet_text: leafletText.trim(),
-          posology: posology.trim() || undefined,
+          dosing,
           side_effects: sideEffects.trim() || undefined,
           interactions: interactions.trim() || undefined,
         })
       } else {
-        await onSave(name.trim())
+        await onSave(name.trim(), dosing)
       }
       close()
     } catch (saveError) {
@@ -175,7 +171,10 @@ export default function MedicationDialog({
               aria-selected={mode === 'custom'}
               variant={mode === 'custom' ? 'contained' : 'outlined'}
               color={mode === 'custom' ? 'primary' : 'inherit'}
-              onClick={switchToCustom}
+              onClick={() => {
+                setMode('custom')
+                setError('')
+              }}
             >
               My leaflet
             </Button>
@@ -184,71 +183,74 @@ export default function MedicationDialog({
           {mode === 'catalog' ? (
             <>
               <aside className="catalog-guide" aria-label="How medication search works">
-                <strong>How medication search works</strong>
+                <strong>Search the HealthVector leaflet database</strong>
                 <p>
-                  Add a name from the HealthVector leaflet catalog, or switch to My leaflet to paste your own prospect.
+                  Set how many times a day you take it and the hours between doses. Clock times are chosen when you generate a schedule.
                 </p>
-                <div className="catalog-guide-examples">
-                  <span>Examples in the default leaflet catalog</span>
-                  <div>
-                    {leafletExamples.map((example) => (
-                      <Button
-                        key={example}
-                        type="button"
-                        size="small"
-                        variant="outlined"
-                        onClick={() => {
-                          setName(example)
-                          setCatalogOptions([])
-                          setCatalogError('')
-                          setError('')
-                        }}
-                      >
-                        {example}
-                      </Button>
-                    ))}
+                {examples.length > 0 && (
+                  <div className="catalog-guide-examples">
+                    <span>Names currently in the catalog</span>
+                    <div>
+                      {examples.map((example) => (
+                        <Button
+                          key={example}
+                          type="button"
+                          size="small"
+                          variant="outlined"
+                          onClick={() => {
+                            setName(example)
+                            setError('')
+                            applyCatalogSuggestion(catalog.find((item) => item.drug_name === example))
+                          }}
+                        >
+                          {example}
+                        </Button>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <small>These are catalog examples, not medication recommendations.</small>
+                )}
+                <small>These are database names, not medication recommendations.</small>
               </aside>
-              <Autocomplete<MedicationCatalogOption, false, false, true>
+              <Autocomplete<LeafletCatalogItem, false, false, true>
                 freeSolo
                 autoSelect={false}
-                options={catalogOptions}
-                loading={catalogLoading}
+                options={catalog}
+                filterOptions={(options, state) => {
+                  const query = state.inputValue.trim().toLowerCase()
+                  if (!query) return options
+                  return options.filter((option) => option.drug_name.toLowerCase().includes(query))
+                }}
                 value={name}
                 inputValue={name}
-                getOptionLabel={(option) => typeof option === 'string' ? option : option.name}
-                onInputChange={(_, value, reason) => {
-                  setName(value)
-                  if (reason === 'input' || reason === 'clear') {
-                    setCatalogOptions([])
-                    setCatalogError('')
-                    setCatalogLoading(value.trim().length >= 2)
-                  }
-                }}
+                getOptionLabel={(option) => typeof option === 'string' ? option : option.drug_name}
+                groupBy={(option) => option.is_default ? 'HealthVector catalog' : 'Your leaflets'}
+                onInputChange={(_, value) => setName(value)}
                 onChange={(_, value) => {
-                  setName(typeof value === 'string' ? value : value?.name.replace(/\s+\([^)]*\)$/, '').trim() ?? '')
+                  if (typeof value === 'string') {
+                    setName(value)
+                    return
+                  }
+                  setName(value?.drug_name ?? '')
+                  applyCatalogSuggestion(value ?? undefined)
                 }}
+                noOptionsText="No matching leaflet. Use My leaflet to add one."
                 renderInput={(params) => (
                   <TextField
                     {...params}
                     autoFocus
                     label="Medication name"
-                    placeholder="Search or enter a name"
+                    placeholder="Search the leaflet database"
                     required
                   />
                 )}
               />
-              {catalogError && <p className="catalog-note catalog-error" role="status">{catalogError}</p>}
             </>
           ) : (
             <>
               <aside className="catalog-guide" aria-label="How a custom leaflet is used">
-                <strong>Your leaflet becomes the source of truth</strong>
+                <strong>Leaflet for answers, interval for the schedule</strong>
                 <p>
-                  Paste the official package leaflet. The assistant and schedule use this text for your medication only.
-                  This does not replace professional medical advice.
+                  Paste the official package leaflet for the assistant. The daily timeline uses doses per day and the gap between them, not fixed clock times.
                 </p>
               </aside>
               <TextField
@@ -260,8 +262,8 @@ export default function MedicationDialog({
                 required
               />
               <TextField
-                label="Leaflet text"
-                placeholder="Paste posology, interactions, and side effects from the official leaflet"
+                label="Official leaflet text"
+                placeholder="Paste the package leaflet. This is the source for questions and citations."
                 value={leafletText}
                 onChange={(event) => setLeafletText(event.target.value)}
                 required
@@ -269,22 +271,16 @@ export default function MedicationDialog({
                 minRows={6}
               />
               <TextField
-                label="Posology (section 4.2, optional)"
-                placeholder="For example: once daily in the evening"
-                value={posology}
-                onChange={(event) => setPosology(event.target.value)}
-                multiline
-                minRows={2}
-              />
-              <TextField
-                label="Side effects (section 4.8, optional)"
+                label="Side effects (optional)"
+                placeholder="Copy the side-effect list if you want it on the medication card"
                 value={sideEffects}
                 onChange={(event) => setSideEffects(event.target.value)}
                 multiline
                 minRows={2}
               />
               <TextField
-                label="Interactions (section 4.5, optional)"
+                label="Interactions (optional)"
+                placeholder="Copy interaction warnings if they are listed"
                 value={interactions}
                 onChange={(event) => setInteractions(event.target.value)}
                 multiline
@@ -292,6 +288,49 @@ export default function MedicationDialog({
               />
             </>
           )}
+
+          <div className="dosing-block">
+            <div className="dose-time-heading">
+              <div>
+                <strong>How you take it</strong>
+                <span>
+                  {mode === 'catalog' && catalogMatch
+                    ? 'Suggested from the leaflet. One daily dose uses a 24-hour gap.'
+                    : 'No clock times here. The generator will propose 3–4 daily plans from this interval.'}
+                </span>
+              </div>
+            </div>
+            <div className="form-two-columns">
+              <TextField
+                select
+                label="Doses per day"
+                value={dosesPerDay}
+                onChange={(event) => changeDoseCount(Number(event.target.value))}
+              >
+                {[1, 2, 3, 4, 5, 6].map((count) => (
+                  <MenuItem key={count} value={count}>{count}</MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                label="Amount per dose"
+                placeholder="1 tablet or 500 mg"
+                value={quantity}
+                onChange={(event) => setQuantity(event.target.value)}
+              />
+            </div>
+            <TextField
+              type="number"
+              label="Hours between doses"
+              value={dosesPerDay === 1 ? 24 : intervalHours}
+              disabled={dosesPerDay === 1}
+              slotProps={{ htmlInput: { min: 1, max: 24, step: 0.5 } }}
+              helperText={dosesPerDay === 1 ? 'One dose defaults to every 24 hours.' : 'Minimum gap used when building and checking a schedule.'}
+              onChange={(event) => {
+                setIntervalTouched(true)
+                setIntervalHours(Number(event.target.value))
+              }}
+            />
+          </div>
           {error && <p className="form-error" role="alert">{error}</p>}
         </DialogContent>
         <DialogActions className="dialog-actions">

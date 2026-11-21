@@ -1,4 +1,4 @@
-import type { AuthSession, ChatResponse, Medication, ScheduleDaySummary, SchedulePayload } from '../types'
+import type { AuthSession, ChatResponse, LeafletCatalogItem, Medication, MedicationDosing, ScheduleDaySummary, SchedulePayload } from '../types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 
@@ -93,12 +93,18 @@ export async function getMedications(token: string): Promise<Medication[]> {
   return request<Medication[]>('/api/medications', {}, token)
 }
 
+export function getLeafletCatalog(token: string): Promise<LeafletCatalogItem[]> {
+  return request<LeafletCatalogItem[]>('/api/leaflets/catalog', {}, token)
+}
+
 export function createCustomLeaflet(
   token: string,
   input: {
     drug_name: string
     leaflet_text: string
-    sections?: Record<string, string>
+    dosing?: MedicationDosing
+    side_effects?: string
+    interactions?: string
   },
 ): Promise<{ id: string; drug_name: string }> {
   return request('/api/leaflets', {
@@ -107,10 +113,10 @@ export function createCustomLeaflet(
   }, token)
 }
 
-export function addMedication(token: string, drugName: string): Promise<Medication> {
+export function addMedication(token: string, drugName: string, dosing?: MedicationDosing): Promise<Medication> {
   return request<Medication>(
     '/api/medications',
-    { method: 'POST', body: JSON.stringify({ drug_name: drugName }) },
+    { method: 'POST', body: JSON.stringify({ drug_name: drugName, dosing }) },
     token,
   )
 }
@@ -176,6 +182,26 @@ export async function getScheduleHistory(
     token,
   )
   return result.days
+}
+
+export function selectScheduleProposal(token: string, scheduleId: string, proposalKey: string): Promise<SchedulePayload> {
+  return request<SchedulePayload>(
+    `/api/schedules/${encodeURIComponent(scheduleId)}/proposals/${encodeURIComponent(proposalKey)}`,
+    { method: 'POST' },
+    token,
+  )
+}
+
+export function saveCustomSchedule(
+  token: string,
+  scheduleId: string,
+  doses: { drug_name: string; scheduled_time: string }[],
+): Promise<SchedulePayload> {
+  return request<SchedulePayload>(
+    `/api/schedules/${encodeURIComponent(scheduleId)}/custom`,
+    { method: 'POST', body: JSON.stringify({ doses }) },
+    token,
+  )
 }
 
 export function approveSchedule(token: string, scheduleId: string): Promise<SchedulePayload> {

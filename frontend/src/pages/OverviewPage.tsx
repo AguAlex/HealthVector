@@ -221,7 +221,7 @@ export default function OverviewPage({
             <div className="empty-state compact-empty">
               <div className="empty-icon"><ScheduleRounded /></div>
               <strong>{schedule ? 'No remaining scheduled doses' : 'Generate today’s schedule'}</strong>
-              <p>A timeline is created from leaflet posology. Approve it before marking doses as taken or missed.</p>
+              <p>A few daily plans are generated from doses per day and the gap between them. Approve one before marking doses as taken or missed.</p>
               <Button onClick={() => onNavigate('schedule')}>Go to schedule</Button>
             </div>
           )}
@@ -229,7 +229,7 @@ export default function OverviewPage({
         <article className="panel next-dose-panel">
           <div className="eyebrow">MEDICATIONS</div>
           <h2>{medications.length ? 'Your list is ready' : 'Start with your medication list'}</h2>
-          <p>Catalog names work immediately. Unknown names need your own leaflet text.</p>
+          <p>Catalog names work immediately. Unknown names need a leaflet plus how you take them.</p>
           <Button onClick={() => onNavigate('medications')}>Open medications</Button>
         </article>
       </section>

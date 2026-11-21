@@ -1,17 +1,19 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { CheckCircleRounded, ScheduleRounded } from '@mui/icons-material'
 import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle } from '@mui/material'
-import type { SchedulePayload } from '../types'
+import type { Medication, SchedulePayload, ScheduleProposal } from '../types'
 
 type Props = {
   schedule: SchedulePayload | null
+  medications: Medication[]
   loading: boolean
   onGenerate: () => Promise<void>
   onApprove: () => Promise<void>
   onReject: () => Promise<void>
   onTake: (doseId: string) => Promise<void>
   onMiss: (doseId: string) => Promise<void>
-  onUpdateTime: (doseId: string, scheduledTime: string) => Promise<void>
+  onSelectProposal: (proposalKey: string) => Promise<void>
+  onSaveCustom: (doses: { drug_name: string; scheduled_time: string }[]) => Promise<void>
   onExport: () => Promise<void>
   onReset: () => Promise<void>
   onAddMedication: () => void
@@ -39,15 +41,26 @@ function formatTime12h(value: string) {
   return `${hour12}:${String(minute).padStart(2, '0')} ${period}`
 }
 
+function emptyCustomTimes(medications: Medication[]) {
+  const next: Record<string, string[]> = {}
+  for (const medication of medications) {
+    const count = medication.dosing?.doses_per_day || 1
+    next[medication.drug_name] = Array.from({ length: count }, () => '08:00')
+  }
+  return next
+}
+
 export default function SchedulePage({
   schedule,
+  medications,
   loading,
   onGenerate,
   onApprove,
   onReject,
   onTake,
   onMiss,
-  onUpdateTime,
+  onSelectProposal,
+  onSaveCustom,
   onExport,
   onReset,
   onAddMedication,
@@ -55,14 +68,18 @@ export default function SchedulePage({
 }: Props) {
   const record = schedule?.schedule
   const doses = schedule?.doses ?? []
+  const proposals = schedule?.proposals ?? []
   const approved = record?.status === 'APPROVED'
   const pending = record?.status === 'PENDING_APPROVAL'
   const blocked = record?.status === 'BLOCKED'
   const dueCount = schedule?.due_count ?? 0
   const taken = doses.filter((dose) => dose.status === 'taken').length
-  const [draftTimes, setDraftTimes] = useState<Record<string, string>>({})
   const [confirmRegenerate, setConfirmRegenerate] = useState(false)
+  const [showChooser, setShowChooser] = useState(false)
+  const [customTimes, setCustomTimes] = useState<Record<string, string[]>>({})
+  const [customError, setCustomError] = useState('')
   const hasSchedule = Boolean(schedule)
+  const chooserOpen = pending && proposals.length > 0 && (doses.length === 0 || showChooser)
 
   const requestGenerate = () => {
     if (hasSchedule) {
@@ -74,27 +91,40 @@ export default function SchedulePage({
 
   const confirmGenerate = async () => {
     setConfirmRegenerate(false)
+    setShowChooser(false)
     await onGenerate()
   }
 
-  const displayTime = (doseId: string, scheduledTime: string) => draftTimes[doseId] ?? clockValue(scheduledTime)
-
-  const commitTime = async (doseId: string, original: string) => {
-    const next = clockValue(draftTimes[doseId] ?? original)
-    if (next === clockValue(original)) {
-      setDraftTimes((current) => {
-        const copy = { ...current }
-        delete copy[doseId]
-        return copy
-      })
-      return
+  const groupedProposal = (proposal: ScheduleProposal) => {
+    const groups: Record<string, string[]> = {}
+    for (const dose of proposal.doses) {
+      groups[dose.drug_name] = [...(groups[dose.drug_name] || []), clockValue(dose.scheduled_time)]
     }
-    await onUpdateTime(doseId, next)
-    setDraftTimes((current) => {
-      const copy = { ...current }
-      delete copy[doseId]
-      return copy
-    })
+    return groups
+  }
+
+  const customDraft = useMemo(() => {
+    if (Object.keys(customTimes).length) return customTimes
+    return emptyCustomTimes(medications)
+  }, [customTimes, medications])
+
+  const saveCustom = async () => {
+    setCustomError('')
+    const payload: { drug_name: string; scheduled_time: string }[] = []
+    for (const medication of medications) {
+      const times = customDraft[medication.drug_name] || []
+      if (times.some((time) => !time)) {
+        setCustomError('Set a clock time for every dose.')
+        return
+      }
+      for (const time of times) payload.push({ drug_name: medication.drug_name, scheduled_time: time })
+    }
+    try {
+      await onSaveCustom(payload)
+      setShowChooser(false)
+    } catch (error) {
+      setCustomError(error instanceof Error ? error.message : 'Those hours do not keep the required gap between doses.')
+    }
   }
 
   return (
@@ -103,7 +133,7 @@ export default function SchedulePage({
         <div>
           <div className="eyebrow">DOSE TRACKING</div>
           <h1>My schedule</h1>
-          <p>Generate a daily plan, move a dose time if needed, then approve it before tracking doses.</p>
+          <p>Generate 3–4 plans from doses per day and the gap between them. Pick one, or enter your own hours.</p>
         </div>
         <div className="page-title-actions">
           <Button variant="outlined" color="inherit" onClick={() => void onExport()} disabled={!schedule || working}>
@@ -127,7 +157,7 @@ export default function SchedulePage({
       {pending && (
         <div className="inline-notice warning-notice" role="status">
           <strong>Approval required</strong>
-          <span>This is a proposal only. Save is refused until you approve it.</span>
+          <span>Choose a proposed plan or save custom hours, then approve. Saving is refused until you approve.</span>
         </div>
       )}
       {dueCount > 0 && approved && (
@@ -150,7 +180,7 @@ export default function SchedulePage({
           <div className="empty-state">
             <div className="empty-icon"><ScheduleRounded /></div>
             <strong>No schedule for today</strong>
-            <p>Add catalog medications or your own leaflet, then generate a daily timeline (for example 08:00).</p>
+            <p>Add medications with doses per day and hours between them, then generate a few daily plans to choose from.</p>
             <Button onClick={onAddMedication}>Manage medication list</Button>
           </div>
         </section>
@@ -160,14 +190,24 @@ export default function SchedulePage({
             <div className="schedule-summary-icon"><ScheduleRounded /></div>
             <div>
               <strong>{statusLabel(record?.status || '')}</strong>
-              <span>{doses.length} planned dose{doses.length === 1 ? '' : 's'} · {taken} taken</span>
+              <span>
+                {doses.length
+                  ? `${doses.length} planned dose${doses.length === 1 ? '' : 's'} · ${taken} taken`
+                  : `${proposals.length} proposed plan${proposals.length === 1 ? '' : 's'} to review`}
+              </span>
             </div>
             <div className="schedule-summary-actions">
-              {pending && (
+              {pending && doses.length > 0 && (
                 <>
                   <Button variant="contained" onClick={() => void onApprove()} disabled={working}>Approve</Button>
                   <Button color="inherit" onClick={() => void onReject()} disabled={working}>Reject</Button>
+                  {proposals.length > 0 && (
+                    <Button color="inherit" onClick={() => setShowChooser(true)} disabled={working}>Change plan</Button>
+                  )}
                 </>
+              )}
+              {pending && doses.length === 0 && (
+                <Button color="inherit" onClick={() => void onReject()} disabled={working}>Reject</Button>
               )}
               {blocked && (
                 <Button color="inherit" onClick={() => void onReject()} disabled={working}>Dismiss blocked plan</Button>
@@ -175,6 +215,92 @@ export default function SchedulePage({
             </div>
           </section>
 
+          {chooserOpen && (
+            <section className="panel schedule-panel">
+              <div className="schedule-date-row">
+                <div>
+                  <div className="eyebrow">OPTIONS</div>
+                  <h2>Choose a daily plan</h2>
+                  <p>Each option keeps the dose count and the hours between doses. Pick one, or enter custom hours below.</p>
+                </div>
+              </div>
+              <div className="proposal-grid">
+                {proposals.map((proposal) => {
+                  const groups = groupedProposal(proposal)
+                  const selected = record?.selected_proposal === proposal.key
+                  return (
+                    <article className={`proposal-card${selected ? ' is-selected' : ''}`} key={proposal.key}>
+                      <strong>{proposal.label}</strong>
+                      <span>{proposal.summary}</span>
+                      <ul>
+                        {Object.entries(groups).map(([drug, times]) => (
+                          <li key={drug}><b>{drug}</b> {times.join(' · ')}</li>
+                        ))}
+                      </ul>
+                      <Button
+                        variant={selected ? 'contained' : 'outlined'}
+                        onClick={() => void onSelectProposal(proposal.key).then(() => setShowChooser(false))}
+                        disabled={working}
+                      >
+                        {selected ? 'Selected' : 'Use this plan'}
+                      </Button>
+                    </article>
+                  )
+                })}
+              </div>
+
+              <div className="custom-hours">
+                <div className="dose-time-heading">
+                  <div>
+                    <strong>Custom hours</strong>
+                    <span>If none of the plans fit, set your own times. The gap between doses of the same medication is checked.</span>
+                  </div>
+                </div>
+                {medications.map((medication) => {
+                  const count = medication.dosing?.doses_per_day || 1
+                  const interval = medication.dosing?.interval_hours ?? (count <= 1 ? 24 : 24 / count)
+                  const times = customDraft[medication.drug_name] || Array.from({ length: count }, () => '08:00')
+                  return (
+                    <div className="custom-hours-drug" key={medication.id}>
+                      <div>
+                        <strong>{medication.drug_name}</strong>
+                        <span>{count}× daily · at least {interval}h apart{medication.dosing?.quantity ? ` · ${medication.dosing.quantity}` : ''}</span>
+                      </div>
+                      <div className="dose-time-list">
+                        {times.map((time, index) => (
+                          <label className="dose-time-row" key={`${medication.id}-${index}`}>
+                            <span>Dose {index + 1}</span>
+                            <input
+                              type="time"
+                              lang="en-US"
+                              step={60}
+                              value={time}
+                              disabled={working}
+                              onChange={(event) => {
+                                const value = event.target.value
+                                setCustomTimes((current) => {
+                                  const base = current[medication.drug_name] ? current : customDraft
+                                  const next = [...(base[medication.drug_name] || times)]
+                                  next[index] = value
+                                  return { ...customDraft, ...current, [medication.drug_name]: next }
+                                })
+                              }}
+                            />
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+                {customError && <p className="form-error" role="alert">{customError}</p>}
+                <Button variant="contained" onClick={() => void saveCustom()} disabled={working || medications.length === 0}>
+                  Save custom hours
+                </Button>
+              </div>
+            </section>
+          )}
+
+          {doses.length > 0 && !chooserOpen && (
           <section className="panel schedule-panel">
             <div className="schedule-date-row">
               <div>
@@ -186,43 +312,7 @@ export default function SchedulePage({
               {doses.map((dose, index) => (
                 <article className={`schedule-dose status-${dose.status}${dose.due ? ' is-due' : ''}`} key={dose.id}>
                   <div className="schedule-dose-time">
-                    {dose.status === 'scheduled' ? (
-                      <div className="schedule-time-edit">
-                        <span className="schedule-time-ampm">{formatTime12h(displayTime(dose.id, dose.scheduled_time))}</span>
-                        <label>
-                          <span className="visually-hidden">Change time for {dose.drug_name}</span>
-                          <input
-                            type="time"
-                            lang="en-US"
-                            step={60}
-                            value={displayTime(dose.id, dose.scheduled_time)}
-                            disabled={working}
-                            onChange={(event) => {
-                              const value = event.target.value
-                              setDraftTimes((current) => ({ ...current, [dose.id]: value }))
-                            }}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault()
-                                void commitTime(dose.id, dose.scheduled_time)
-                              }
-                            }}
-                          />
-                        </label>
-                        {displayTime(dose.id, dose.scheduled_time) !== clockValue(dose.scheduled_time) && (
-                          <Button
-                            size="small"
-                            variant="text"
-                            disabled={working}
-                            onClick={() => void commitTime(dose.id, dose.scheduled_time)}
-                          >
-                            Save
-                          </Button>
-                        )}
-                      </div>
-                    ) : (
-                      formatTime12h(dose.scheduled_time)
-                    )}
+                    {formatTime12h(dose.scheduled_time)}
                   </div>
                   <div className="schedule-timeline">
                     <span className="timeline-dot" />
@@ -233,7 +323,10 @@ export default function SchedulePage({
                       <div className="schedule-dose-icon">{dose.drug_name.slice(0, 2).toUpperCase()}</div>
                       <div className="schedule-dose-name">
                         <strong>{dose.drug_name}</strong>
-                        <span>{dose.due ? 'Time reached' : dose.status === 'scheduled' ? 'Tap the time to move this dose' : 'Logged dose'}</span>
+                        <span>
+                          {dose.quantity ? `${dose.quantity} · ` : ''}
+                          {dose.due ? 'Time reached' : dose.status === 'scheduled' ? 'Keep the planned gap between doses' : 'Logged dose'}
+                        </span>
                       </div>
                       <span className={`status-chip ${dose.status}`}>{dose.status}</span>
                     </div>
@@ -251,6 +344,7 @@ export default function SchedulePage({
               <div className="day-complete"><CheckCircleRounded /> All tracked doses are logged.</div>
             )}
           </section>
+          )}
         </>
       )}
 
@@ -267,7 +361,7 @@ export default function SchedulePage({
         <DialogTitle id="regenerate-schedule-title">Regenerate today’s schedule?</DialogTitle>
         <DialogContent>
           <DialogContentText id="regenerate-schedule-description">
-            This replaces the current plan. Taken and missed marks for today will be lost and you will need to approve the new proposal.
+            This replaces the current plan. Taken and missed marks for today will be lost and you will need to pick a proposal again.
           </DialogContentText>
         </DialogContent>
         <DialogActions>

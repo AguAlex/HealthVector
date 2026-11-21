@@ -3,7 +3,7 @@ import { BrowserRouter, useLocation, useNavigate } from 'react-router-dom'
 import MainHeader from './components/MainHeader'
 import MainSlider from './components/MainSlider'
 import DisclaimerBanner from './components/DisclaimerBanner'
-import type { AppPage, AuthSession, CustomLeafletInput, Medication, ScheduleDaySummary, SchedulePayload } from './types'
+import type { AppPage, AuthSession, CustomLeafletInput, LeafletCatalogItem, Medication, MedicationDosing, ScheduleDaySummary, SchedulePayload } from './types'
 import Router from './Router'
 import {
   addMedication as addBackendMedication,
@@ -13,6 +13,9 @@ import {
   checkInteractions,
   exportScheduleText,
   generateSchedule,
+  saveCustomSchedule,
+  selectScheduleProposal,
+  getLeafletCatalog,
   getMedications,
   getScheduleHistory,
   getTodaySchedule,
@@ -23,7 +26,6 @@ import {
   removeMedication as removeBackendMedication,
   resetDashboard,
   signIn,
-  updateDoseTime,
 } from './utils/api'
 import { clearSession, readColorTheme, readSession, saveColorTheme, saveSession, type ColorTheme } from './utils/storage'
 import './App.css'
@@ -40,6 +42,7 @@ function AppFrame() {
   const [theme, setTheme] = useState<ColorTheme>(readColorTheme)
   const [menuOpen, setMenuOpen] = useState(false)
   const [medications, setMedications] = useState<Medication[]>([])
+  const [catalog, setCatalog] = useState<LeafletCatalogItem[]>([])
   const [schedule, setSchedule] = useState<SchedulePayload | null>(null)
   const [scheduleLoading, setScheduleLoading] = useState(false)
   const [scheduleWorking, setScheduleWorking] = useState(false)
@@ -115,11 +118,13 @@ function AppFrame() {
     Promise.all([
       getMedications(session.access_token),
       getTodaySchedule(session.access_token),
+      getLeafletCatalog(session.access_token).catch(() => [] as LeafletCatalogItem[]),
     ])
-      .then(async ([remote, today]) => {
+      .then(async ([remote, today, leaflets]) => {
         if (!active) return
         setMedications(remote)
         setSchedule(today)
+        setCatalog(leaflets)
         if (remote.length > 1) {
           try {
             await applyInteractionResult(session.access_token)
@@ -159,6 +164,7 @@ function AppFrame() {
       saveSession(nextSession)
       setSession(nextSession)
       setMedications([])
+      setCatalog([])
       setSchedule(null)
       setHistory([])
       setNotice('')
@@ -174,6 +180,7 @@ function AppFrame() {
     clearSession()
     setSession(null)
     setMedications([])
+    setCatalog([])
     setSchedule(null)
     setHistory([])
     setNotice('')
@@ -181,13 +188,13 @@ function AppFrame() {
     navigate('/login', { replace: true })
   }
 
-  const saveMedication = async (drugName: string) => {
+  const saveMedication = async (drugName: string, dosing?: MedicationDosing) => {
     if (!session) return
     if (medications.some((medication) => medication.drug_name.toLowerCase() === drugName.toLowerCase())) {
       throw new Error('This medication is already in your list.')
     }
 
-    const saved = await addBackendMedication(session.access_token, drugName)
+    const saved = await addBackendMedication(session.access_token, drugName, dosing)
     const nextList = [...medications, saved]
     setMedications(nextList)
     setNotice('')
@@ -202,16 +209,13 @@ function AppFrame() {
       throw new Error('This medication is already in your list.')
     }
 
-    const sections: Record<string, string> = {}
-    if (input.posology) sections['4.2'] = input.posology
-    if (input.side_effects) sections['4.8'] = input.side_effects
-    if (input.interactions) sections['4.5'] = input.interactions
-
     try {
       await createCustomLeaflet(session.access_token, {
         drug_name: input.drug_name,
         leaflet_text: input.leaflet_text,
-        sections,
+        dosing: input.dosing,
+        side_effects: input.side_effects,
+        interactions: input.interactions,
       })
     } catch (error) {
       const message = error instanceof Error ? error.message : ''
@@ -220,7 +224,15 @@ function AppFrame() {
       }
     }
 
-    await saveMedication(input.drug_name)
+    await saveMedication(input.drug_name, input.dosing)
+    try {
+      setCatalog(await getLeafletCatalog(session.access_token))
+    } catch {
+      setCatalog((current) => {
+        const exists = current.some((item) => item.drug_name.toLowerCase() === input.drug_name.toLowerCase())
+        return exists ? current : [...current, { drug_name: input.drug_name, is_default: false }]
+      })
+    }
   }
 
   const removeMedication = async (medication: Medication) => {
@@ -294,6 +306,26 @@ function AppFrame() {
     await refreshHistory(session.access_token)
   })
 
+  const onSelectProposal = (proposalKey: string) => withScheduleWork(async () => {
+    if (!session || !schedule) return
+    setSchedule(await selectScheduleProposal(session.access_token, schedule.schedule.id, proposalKey))
+  })
+
+  const onSaveCustomSchedule = async (doses: { drug_name: string; scheduled_time: string }[]) => {
+    if (!session || !schedule) return
+    setScheduleWorking(true)
+    setNotice('')
+    try {
+      setSchedule(await saveCustomSchedule(session.access_token, schedule.schedule.id, doses))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Those hours do not keep the required gap between doses.'
+      setNotice(message)
+      throw error instanceof Error ? error : new Error(message)
+    } finally {
+      setScheduleWorking(false)
+    }
+  }
+
   const onTakeDose = (doseId: string) => withScheduleWork(async () => {
     if (!session) return
     await markDoseTaken(session.access_token, doseId)
@@ -306,11 +338,6 @@ function AppFrame() {
     await markDoseMissed(session.access_token, doseId)
     await loadSchedule(session.access_token)
     await refreshHistory(session.access_token)
-  })
-
-  const onUpdateDoseTime = (doseId: string, scheduledTime: string) => withScheduleWork(async () => {
-    if (!session) return
-    setSchedule(await updateDoseTime(session.access_token, doseId, scheduledTime))
   })
 
   const onExportSchedule = async () => {
@@ -362,6 +389,7 @@ function AppFrame() {
           <Router
             session={session}
             medications={medications}
+            catalog={catalog}
             schedule={schedule}
             scheduleLoading={scheduleLoading}
             scheduleWorking={scheduleWorking}
@@ -385,9 +413,10 @@ function AppFrame() {
             onGenerateSchedule={onGenerateSchedule}
             onApproveSchedule={onApproveSchedule}
             onRejectSchedule={onRejectSchedule}
+            onSelectProposal={onSelectProposal}
+            onSaveCustomSchedule={onSaveCustomSchedule}
             onTakeDose={onTakeDose}
             onMissDose={onMissDose}
-            onUpdateDoseTime={onUpdateDoseTime}
             onExportSchedule={onExportSchedule}
           />
         </main>

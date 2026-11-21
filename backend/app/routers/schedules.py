@@ -4,11 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.core.dependencies import get_current_user
 from app.schemas.schedule import (
+    CustomScheduleRequest,
     DoseResponse,
     DoseTimeUpdate,
     ScheduleDaySummary,
     ScheduleExportResponse,
     ScheduleHistoryResponse,
+    ScheduleProposal,
     ScheduleRecord,
     ScheduleResponse,
 )
@@ -31,6 +33,7 @@ def _serialize(payload: dict, now: datetime | None = None) -> ScheduleResponse:
             schedule_id=str(item["schedule_id"]) if item.get("schedule_id") else None,
             drug_name=item["drug_name"],
             scheduled_time=_format_time(str(item.get("scheduled_time") or "")),
+            quantity=item.get("quantity"),
             status=item.get("status") or "scheduled",
             date=str(item.get("date") or schedule.get("date")),
             due=str(item["id"]) in due_ids,
@@ -47,8 +50,19 @@ def _serialize(payload: dict, now: datetime | None = None) -> ScheduleResponse:
             interaction_severity=schedule.get("interaction_severity") or "none",
             blocked_reason=schedule.get("blocked_reason"),
             approved_at=str(schedule["approved_at"]) if schedule.get("approved_at") else None,
+            selected_proposal=schedule.get("selected_proposal"),
         ),
         doses=doses,
+        proposals=[
+            ScheduleProposal(
+                key=str(item.get("key")),
+                label=str(item.get("label") or item.get("key")),
+                summary=str(item.get("summary") or ""),
+                doses=item.get("doses") or [],
+            )
+            for item in payload.get("proposals") or []
+            if item.get("key")
+        ],
         interaction=payload.get("interaction"),
         due_count=len(due_ids),
     )
@@ -79,6 +93,30 @@ async def get_today_schedule(current_user: dict = Depends(get_current_user)):
 @router.post("/generate", response_model=ScheduleResponse)
 async def generate_schedule(current_user: dict = Depends(get_current_user)):
     payload = ScheduleService.generate(current_user["id"], proposed_by="user")
+    return _serialize(payload)
+
+
+@router.post("/{schedule_id}/proposals/{proposal_key}", response_model=ScheduleResponse)
+async def select_schedule_proposal(
+    schedule_id: str,
+    proposal_key: str,
+    current_user: dict = Depends(get_current_user),
+):
+    payload = ScheduleService.apply_proposal(current_user["id"], schedule_id, proposal_key)
+    return _serialize(payload)
+
+
+@router.post("/{schedule_id}/custom", response_model=ScheduleResponse)
+async def save_custom_schedule(
+    schedule_id: str,
+    body: CustomScheduleRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    payload = ScheduleService.apply_custom(
+        current_user["id"],
+        schedule_id,
+        [item.model_dump() for item in body.doses],
+    )
     return _serialize(payload)
 
 
